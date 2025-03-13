@@ -3,7 +3,7 @@
  * @param obj The object to clean
  * @returns A new object with empty values removed
  */
-export function removeEmptyValues(obj: any): any {
+export function removeEmptyValues<T>(obj: T): T {
     // Return non-objects as is
     if (obj === null || typeof obj !== 'object') {
         return obj;
@@ -25,15 +25,15 @@ export function removeEmptyValues(obj: any): any {
                 return false;
             }
             return true;
-        });
+        }) as unknown as T;
     }
 
     // Handle regular objects
-    const result: Record<string, any> = {};
+    const result = {} as Record<string, unknown>;
 
     // Process each key in the object
     for (const key of Object.keys(obj)) {
-        const value = obj[key];
+        const value = (obj as Record<string, unknown>)[key];
 
         // Skip empty strings
         if (value === '') {
@@ -62,5 +62,5 @@ export function removeEmptyValues(obj: any): any {
         result[key] = cleanedValue;
     }
 
-    return result;
+    return result as unknown as T;
 } 

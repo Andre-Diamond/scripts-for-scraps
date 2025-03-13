@@ -74,14 +74,17 @@ export function applyWorkgroupOrder(meetingSummary: MeetingSummary): MeetingSumm
                 if (value) {
                     if (Array.isArray(value)) {
                         if (value.length > 0) {
-                            orderedItem[field as keyof AgendaItem] = value;
+                            // Use type assertion to prevent type errors with dynamic field assignment
+                            (orderedItem as any)[field] = value;
                         }
                     } else if (typeof value === 'string') {
                         if (value.trim() !== '') {
-                            orderedItem[field as keyof AgendaItem] = value;
+                            // Use type assertion to prevent type errors with dynamic field assignment
+                            (orderedItem as any)[field] = value;
                         }
                     } else {
-                        orderedItem[field as keyof AgendaItem] = value;
+                        // Use type assertion to prevent type errors with dynamic field assignment
+                        (orderedItem as any)[field] = value;
                     }
                 }
             });

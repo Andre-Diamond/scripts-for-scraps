@@ -11,6 +11,7 @@ import JSONFormatter from './JSONFormatter';
 import { MeetingSummary, DatabaseRecord } from '../../types';
 import { applyWorkgroupOrder } from '../utils/orderMapping';
 import { removeEmptyValues } from '../utils/cleanUtils';
+import { convertParsedDataToMeetingSummary } from '../utils/dataConverters';
 
 interface GitHubItem {
   type: string;
@@ -147,7 +148,17 @@ export default function GitbookSync() {
     try {
       const filePath = `timeline/${selectedYear}/${selectedMonth}/${selectedFile}`;
       const markdownContent = await fetchFileContent(filePath);
-      let gitbookData = parseMarkdownToJson(markdownContent) as MeetingSummary | MeetingSummary[];
+      const parsedData = parseMarkdownToJson(markdownContent);
+
+      // Handle potential error in parsing
+      if ('error' in parsedData) {
+        setError(`Error parsing markdown: ${parsedData.error}`);
+        setIsComparing(false);
+        return;
+      }
+
+      // Convert ParsedMeetingData to MeetingSummary
+      let gitbookData = convertParsedDataToMeetingSummary(parsedData);
 
       if (!Array.isArray(gitbookData)) {
         gitbookData = [gitbookData];
@@ -232,7 +243,17 @@ export default function GitbookSync() {
       for (const file of files) {
         const filePath = `timeline/${selectedYear}/${selectedMonth}/${file}`;
         const markdownContent = await fetchFileContent(filePath);
-        let gitbookData = parseMarkdownToJson(markdownContent) as MeetingSummary | MeetingSummary[];
+        const parsedData = parseMarkdownToJson(markdownContent);
+
+        // Handle potential error in parsing
+        if ('error' in parsedData) {
+          setError(`Error parsing markdown: ${parsedData.error}`);
+          setIsComparing(false);
+          return;
+        }
+
+        // Convert ParsedMeetingData to MeetingSummary
+        let gitbookData = convertParsedDataToMeetingSummary(parsedData);
 
         if (!Array.isArray(gitbookData)) {
           gitbookData = [gitbookData];

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { MeetingSummary } from '../types';
+import { MeetingSummary } from '../../types';
 
 interface ComparisonResult {
   workgroup: string;

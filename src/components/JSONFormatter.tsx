@@ -1,22 +1,26 @@
 import React from 'react';
 
 interface JSONFormatterProps {
-  data: any;
+  data: unknown;
 }
 
 const JSONFormatter: React.FC<JSONFormatterProps> = ({ data }) => {
   // Format the JSON with syntax highlighting
-  const formatJSON = (json: any): string => {
+  const formatJSON = (json: unknown): string => {
+    // Convert to string if not already a string
+    let jsonString: string;
     if (typeof json !== 'string') {
-      json = JSON.stringify(json, null, 2);
+      jsonString = JSON.stringify(json, null, 2);
+    } else {
+      jsonString = json;
     }
-    
-    return json
+
+    return jsonString
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, 
-        (match) => {
+      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        (match: string) => {
           let cls = 'number';
           if (/^"/.test(match)) {
             if (/:$/.test(match)) {
@@ -35,8 +39,8 @@ const JSONFormatter: React.FC<JSONFormatterProps> = ({ data }) => {
   };
 
   return (
-    <pre 
-      dangerouslySetInnerHTML={{ __html: formatJSON(data) }} 
+    <pre
+      dangerouslySetInnerHTML={{ __html: formatJSON(data) }}
     />
   );
 };
