@@ -146,9 +146,14 @@ export default function GitbookSync() {
     setError(null);
 
     try {
+      // First, fetch the Supabase data to pass to the parser
+      const supabaseData = await fetchMeetingSummariesFromSupabase() as DatabaseRecord[];
+
       const filePath = `timeline/${selectedYear}/${selectedMonth}/${selectedFile}`;
       const markdownContent = await fetchFileContent(filePath);
-      const parsedData = parseMarkdownToJson(markdownContent);
+
+      // Pass the supabaseData to the parser to enable workgroup_id lookup
+      const parsedData = parseMarkdownToJson(markdownContent, supabaseData);
 
       // Handle potential error in parsing
       if ('error' in parsedData) {
@@ -164,7 +169,6 @@ export default function GitbookSync() {
         gitbookData = [gitbookData];
       }
 
-      const supabaseData = await fetchMeetingSummariesFromSupabase() as DatabaseRecord[];
       const results: ComparisonResult[] = [];
 
       for (const workgroupData of gitbookData) {
@@ -228,7 +232,7 @@ export default function GitbookSync() {
   // Compare all files in the current month
   const compareAll = async () => {
     if (!selectedYear || !selectedMonth) {
-      setError('Please select a month to compare');
+      setError('Please select a year and month');
       return;
     }
 
@@ -237,19 +241,27 @@ export default function GitbookSync() {
     setComparisonResults([]);
 
     try {
+      // First, fetch the Supabase data to pass to all parsers
       const supabaseData = await fetchMeetingSummariesFromSupabase() as DatabaseRecord[];
+
+      const contents = await fetchDirectoryContents(`timeline/${selectedYear}/${selectedMonth}`);
+      const markdownFiles = contents
+        .filter((item: GitHubItem) => item.type === 'file' && item.name.endsWith('.md'))
+        .map((item: GitHubItem) => item.name);
+
       const allResults: ComparisonResult[] = [];
 
-      for (const file of files) {
+      for (const file of markdownFiles) {
         const filePath = `timeline/${selectedYear}/${selectedMonth}/${file}`;
         const markdownContent = await fetchFileContent(filePath);
-        const parsedData = parseMarkdownToJson(markdownContent);
 
-        // Handle potential error in parsing
+        // Pass the supabaseData to the parser to enable workgroup_id lookup
+        const parsedData = parseMarkdownToJson(markdownContent, supabaseData);
+
+        // Skip files with parsing errors
         if ('error' in parsedData) {
-          setError(`Error parsing markdown: ${parsedData.error}`);
-          setIsComparing(false);
-          return;
+          console.error(`Error parsing ${file}: ${parsedData.error}`);
+          continue;
         }
 
         // Convert ParsedMeetingData to MeetingSummary

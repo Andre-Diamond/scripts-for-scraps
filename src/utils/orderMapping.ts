@@ -54,6 +54,22 @@ export function applyWorkgroupOrder(meetingSummary: MeetingSummary): MeetingSumm
     // Deep clone to avoid mutating the original
     const clonedSummary = JSON.parse(JSON.stringify(meetingSummary)) as MeetingSummary;
 
+    // Sort peoplePresent if it exists in meetingInfo
+    if (clonedSummary.meetingInfo && clonedSummary.meetingInfo.peoplePresent) {
+        // If it's a comma-separated string, split, sort, and join back
+        if (typeof clonedSummary.meetingInfo.peoplePresent === 'string') {
+            const people = clonedSummary.meetingInfo.peoplePresent
+                .split(',')
+                .map(p => p.trim())
+                .filter(Boolean);
+
+            // Sort alphabetically (case-insensitive)
+            people.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+            clonedSummary.meetingInfo.peoplePresent = people.join(', ');
+        }
+    }
+
     // Get the specific order for this workgroup or use the default
     const orderFields = orderMapping[workgroup] || defaultOrder;
 
@@ -65,6 +81,31 @@ export function applyWorkgroupOrder(meetingSummary: MeetingSummary): MeetingSumm
             // Always include these fields first
             orderedItem.agenda = agendaItem.agenda;
             orderedItem.status = agendaItem.status;
+
+            // Copy peoplePresent, facilitator, and documenter with original casing
+            if (agendaItem.peoplePresent) {
+                // Make sure peoplePresent is sorted alphabetically if it exists
+                if (Array.isArray(agendaItem.peoplePresent) && agendaItem.peoplePresent.length > 0) {
+                    orderedItem.peoplePresent = [...agendaItem.peoplePresent]
+                        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+                } else {
+                    orderedItem.peoplePresent = agendaItem.peoplePresent;
+                }
+            } else {
+                orderedItem.peoplePresent = [];
+            }
+
+            if (agendaItem.facilitator) {
+                orderedItem.facilitator = agendaItem.facilitator;
+            } else {
+                orderedItem.facilitator = '';
+            }
+
+            if (agendaItem.documenter) {
+                orderedItem.documenter = agendaItem.documenter;
+            } else {
+                orderedItem.documenter = '';
+            }
 
             // Add fields in the specified order if they contain data
             orderFields.forEach(field => {
@@ -96,6 +137,7 @@ export function applyWorkgroupOrder(meetingSummary: MeetingSummary): MeetingSumm
             if (!orderedItem.meetingTopics) orderedItem.meetingTopics = [];
             if (!orderedItem.issues) orderedItem.issues = [];
             if (!orderedItem.learningPoints) orderedItem.learningPoints = [];
+            if (!orderedItem.leaderboard) orderedItem.leaderboard = [];
 
             return orderedItem;
         });

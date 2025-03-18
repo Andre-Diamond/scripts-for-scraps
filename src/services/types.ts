@@ -64,6 +64,9 @@ export interface AgendaItem {
     meetingTopics: string[];
     issues: string[];
     leaderboard: string[];
+    peoplePresent: string[];
+    facilitator: string;
+    documenter: string;
 }
 
 // Full parsed meeting data

@@ -19,7 +19,8 @@ export async function fetchMeetingSummariesFromSupabase() {
         console.log('Executing Supabase query on meetingsummaries table...');
         const { data, error, status, statusText } = await supabase
             .from('meetingsummaries')
-            .select('*');
+            .select('*')
+            .eq('confirmed', true);
 
         console.log('Supabase response status:', status, statusText);
 

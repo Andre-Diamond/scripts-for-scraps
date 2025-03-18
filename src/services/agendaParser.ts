@@ -1,5 +1,84 @@
 import { AgendaItem } from './types';
 
+// Function to detect and repair character-by-character storage issues
+function repairTopicsArray(topics: unknown[]): string[] {
+    if (!topics || topics.length === 0) return [];
+
+    // Check if this might be a character-by-character array
+    const isSingleCharArray = topics.length > 5 &&
+        topics.filter(t => typeof t === 'string' && t.length === 1).length > topics.length * 0.7;
+
+    if (isSingleCharArray) {
+        console.log('Detected character-by-character array, repairing...');
+
+        // Attempt to reconstruct original strings based on specific patterns
+        const reconstructed: string[] = [];
+        let currentWord = '';
+        let i = 0;
+
+        while (i < topics.length) {
+            const char = String(topics[i] || '');
+
+            // If empty space and we have accumulated characters, 
+            // this might be a word boundary
+            if ((char === ' ' || char === '') && currentWord.length > 0) {
+                // Decide whether to add a space or start a new word
+                // Check if next chars form a new word (capital letter followed by lowercase)
+                const nextIndex = i + 1;
+                if (nextIndex < topics.length) {
+                    const nextChar = String(topics[nextIndex] || '');
+                    if (nextChar.match(/[A-Z]/) &&
+                        nextIndex + 1 < topics.length &&
+                        String(topics[nextIndex + 1] || '').match(/[a-z]/)) {
+                        // Likely a new word - add current and start new
+                        reconstructed.push(currentWord);
+                        currentWord = '';
+                    } else {
+                        // Just a space within the same word/phrase
+                        currentWord += ' ';
+                    }
+                } else {
+                    // End of array, push the current word
+                    reconstructed.push(currentWord);
+                    currentWord = '';
+                }
+            } else {
+                // Add character to current word
+                currentWord += char;
+            }
+            i++;
+        }
+
+        // Add any remaining word
+        if (currentWord.length > 0) {
+            reconstructed.push(currentWord);
+        }
+
+        // If reconstruction produced nothing useful, fall back to joining everything
+        if (reconstructed.length === 0) {
+            return [topics.map(char => String(char || '')).join('')];
+        }
+
+        // Final refinement of reconstructed array
+        const result: string[] = [];
+        for (const item of reconstructed) {
+            // Check if it might be multiple topics joined
+            if (item.length > 40 && item.includes(',')) {
+                // Split by commas and add each as a separate item
+                const parts = item.split(',').map(p => p.trim()).filter(Boolean);
+                result.push(...parts);
+            } else {
+                result.push(item);
+            }
+        }
+
+        return result;
+    }
+
+    // Not a character array, just ensure all items are strings
+    return topics.map(topic => String(topic || ''));
+}
+
 // Helper function to check if an agenda item has any content
 export function hasAgendaContent(agendaItem: AgendaItem): boolean {
     return (
@@ -14,7 +93,10 @@ export function hasAgendaContent(agendaItem: AgendaItem): boolean {
         agendaItem.learningPoints.length > 0 ||
         agendaItem.meetingTopics.length > 0 ||
         agendaItem.issues.length > 0 ||
-        agendaItem.leaderboard.length > 0
+        agendaItem.leaderboard.length > 0 ||
+        agendaItem.peoplePresent.length > 0 ||
+        agendaItem.facilitator.trim() !== '' ||
+        agendaItem.documenter.trim() !== ''
     );
 }
 
@@ -27,8 +109,106 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
         agendaItem.meetingTopics = [];
     }
 
+    // Initialize peoplePresent array
+    if (!agendaItem.peoplePresent) {
+        agendaItem.peoplePresent = [];
+    }
+
+    // Initialize facilitator and documenter
+    if (!agendaItem.facilitator) {
+        agendaItem.facilitator = '';
+    }
+
+    if (!agendaItem.documenter) {
+        agendaItem.documenter = '';
+    }
+
     // For debugging: log what we're working with
     console.log('Content to parse length:', content?.length);
+
+    // Parse People Present - maintaining original casing
+    const peopleMatch = content.match(/#### (?:People|Attendees|People Present):([\s\S]*?)(?=\n#### |$)/i);
+    if (peopleMatch) {
+        const peopleText = peopleMatch[1].trim();
+        console.log('Original peoplePresent text from markdown:', peopleText);
+
+        // If the list is formatted as bullet points
+        const bulletPoints = peopleText.match(/^-\s+([^\n]+)/gm);
+        if (bulletPoints && bulletPoints.length > 0) {
+            agendaItem.peoplePresent = bulletPoints.map(p => p.replace(/^-\s+/, '').trim());
+        } else {
+            // Otherwise, try comma-separated list
+            const people = peopleText.split(',').map(p => p.trim()).filter(Boolean);
+            if (people.length > 0) {
+                agendaItem.peoplePresent = people;
+            } else {
+                // Last option: split by newlines
+                const lines = peopleText.split('\n').map(line => line.trim()).filter(Boolean);
+                agendaItem.peoplePresent = lines;
+            }
+        }
+        console.log('Preserved original case for peoplePresent:', agendaItem.peoplePresent);
+    }
+
+    // Parse Facilitator - maintaining original casing
+    const facilitatorMatch = content.match(/#### Facilitator:([\s\S]*?)(?=\n#### |$)/i);
+    if (facilitatorMatch) {
+        const originalFacilitator = facilitatorMatch[1].trim();
+        console.log('Original facilitator text from markdown:', originalFacilitator);
+        agendaItem.facilitator = originalFacilitator;
+        console.log('Preserved original case for facilitator:', agendaItem.facilitator);
+    }
+
+    // Parse Documenter - maintaining original casing
+    const documenterMatch = content.match(/#### (?:Documenter|Note Taker):([\s\S]*?)(?=\n#### |$)/i);
+    if (documenterMatch) {
+        const originalDocumenter = documenterMatch[1].trim();
+        console.log('Original documenter text from markdown:', originalDocumenter);
+        agendaItem.documenter = originalDocumenter;
+        console.log('Preserved original case for documenter:', agendaItem.documenter);
+    }
+
+    // Remove facilitator and documenter from peoplePresent if they exist there
+    // Use case-insensitive comparison, but maintain original casing for remaining entries
+    if (agendaItem.facilitator && agendaItem.peoplePresent.length > 0) {
+        const facilitatorLower = agendaItem.facilitator.toLowerCase();
+        const peopleBeforeFilter = [...agendaItem.peoplePresent];
+
+        agendaItem.peoplePresent = agendaItem.peoplePresent.filter(
+            person => person.toLowerCase() !== facilitatorLower
+        );
+
+        if (peopleBeforeFilter.length !== agendaItem.peoplePresent.length) {
+            console.log('Removed facilitator from peoplePresent while preserving case for others');
+        }
+    }
+
+    if (agendaItem.documenter && agendaItem.peoplePresent.length > 0) {
+        const documenterLower = agendaItem.documenter.toLowerCase();
+        const peopleBeforeFilter = [...agendaItem.peoplePresent];
+
+        agendaItem.peoplePresent = agendaItem.peoplePresent.filter(
+            person => person.toLowerCase() !== documenterLower
+        );
+
+        if (peopleBeforeFilter.length !== agendaItem.peoplePresent.length) {
+            console.log('Removed documenter from peoplePresent while preserving case for others');
+        }
+    }
+
+    // Sort peoplePresent alphabetically while preserving original case
+    if (agendaItem.peoplePresent.length > 0) {
+        agendaItem.peoplePresent.sort((a, b) =>
+            a.toLowerCase().localeCompare(b.toLowerCase())
+        );
+        console.log('Sorted peoplePresent alphabetically');
+    }
+
+    // Final verification of case preservation
+    console.log('Final data with preserved case:');
+    console.log('- facilitator:', agendaItem.facilitator);
+    console.log('- documenter:', agendaItem.documenter);
+    console.log('- peoplePresent:', agendaItem.peoplePresent);
 
     // FIRST PRIORITY: Look specifically for #### Agenda Items: format
     const agendaItemsHeadingMatch = content.match(/####\s+Agenda\s+Items\s*:/i);
@@ -47,12 +227,12 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
 
         console.log('Items content length:', itemsContent.length);
 
-        // Get all bullet point items
+        // Get all bullet point items - matching only lines that start with a dash
         const bulletPoints = itemsContent.match(/^-\s+(.+)$/gm);
         console.log('Bullet points found:', bulletPoints?.length);
 
         if (bulletPoints && bulletPoints.length > 0) {
-            // Process bullet points by removing the dash prefix
+            // Process bullet points by removing only the leading dash prefix
             agendaItem.meetingTopics = bulletPoints.map(line =>
                 line.replace(/^-\s+/, '').trim()
             );
@@ -131,10 +311,13 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
                 const hasDashLines = lines.some(line => line.startsWith('-'));
 
                 if (hasDashLines) {
-                    // Process as dash-prefixed lines
+                    // Process as dash-prefixed lines - only removing the leading dash
                     const processedLines = lines
                         .filter(line => line.startsWith('-'))
-                        .map(line => line.substring(1).trim());
+                        .map(line => {
+                            // Only remove the first dash and space, preserving any internal hyphens
+                            return line.replace(/^-\s+/, '').trim();
+                        });
 
                     console.log('Processed dash-prefixed lines:', processedLines);
 
@@ -236,33 +419,98 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
         }
     }
 
-    // Absolute last resort - if we still have no meetingTopics, check for known content patterns
-    // and hardcode the values from the example if detected
-    if (!agendaItem.meetingTopics || agendaItem.meetingTopics.length === 0) {
-        // Check if this looks like the example we were given
-        if (content.includes('MetaCoders Lab Discussion') &&
-            content.includes('Welcoming new members and Introduction') &&
-            content.includes('UPDATE STATUS ON DEVELOPMENT: EC-Entity-Connections')) {
-            console.log('Detected example format - using hardcoded values as last resort');
-            agendaItem.meetingTopics = [
-                'Welcoming new members and Introduction',
-                'Review of last meeting summary Action Items',
-                'UPDATE STATUS ON DEVELOPMENT: EC-Entity-Connections, W3CD-Web3-Contributors-Dashboard, CSDB-Collaboration-Skills-Database, Social-Media-Dashboard, Reputation-System-using-SoulBound-Tokens-SBTs',
-                'Facilitation in Q1',
-                'Open discussion',
-                'How to implement the potential outcome of AI SandBox & AI Think Tank in the R&D Guild in the next quarters',
-                'MetaCoders Lab Discussion',
-                'Good bye messages'
-            ];
-            console.log('Applied hardcoded values fallback for the example');
+    // Ensure meetingTopics are processed consistently
+    if (agendaItem.meetingTopics && agendaItem.meetingTopics.length > 0) {
+        // First check if this is a character-by-character array
+        agendaItem.meetingTopics = repairTopicsArray(agendaItem.meetingTopics);
+
+        // Apply standard normalization
+        // First, ensure each topic is a proper string
+        const fixedTopics: string[] = [];
+
+        for (let i = 0; i < agendaItem.meetingTopics.length; i++) {
+            const topic = agendaItem.meetingTopics[i];
+
+            // Check if this topic is already a proper string
+            if (typeof topic === 'string' && topic.length > 0) {
+                // If it looks like a single character and the next few items are also single characters,
+                // this is likely a word that got split into individual characters
+                if (topic.length === 1 && i < agendaItem.meetingTopics.length - 1 &&
+                    typeof agendaItem.meetingTopics[i + 1] === 'string' &&
+                    agendaItem.meetingTopics[i + 1].length === 1) {
+
+                    // Try to collect characters until we hit a full word or end of array
+                    let combinedWord = topic;
+                    let j = i + 1;
+
+                    while (j < agendaItem.meetingTopics.length &&
+                        typeof agendaItem.meetingTopics[j] === 'string' &&
+                        agendaItem.meetingTopics[j].length === 1) {
+                        combinedWord += agendaItem.meetingTopics[j];
+                        j++;
+                    }
+
+                    // If we found a sequence of characters, add the combined word and skip ahead
+                    if (combinedWord.length > 1) {
+                        fixedTopics.push(combinedWord);
+                        i = j - 1; // Skip to the end of the combined sequence
+                        continue;
+                    }
+                }
+
+                // Regular string - use as is
+                fixedTopics.push(topic);
+            }
+            else if (topic) {
+                // Convert any non-string to string
+                fixedTopics.push(String(topic));
+            }
         }
+
+        // Replace the original array with our fixed version
+        agendaItem.meetingTopics = fixedTopics;
+
+        // Final sanitization
+        agendaItem.meetingTopics = agendaItem.meetingTopics.map(topic => {
+            // Remove any weird characters or normalize spacing
+            return topic.trim()
+                .replace(/\s+/g, ' ') // Normalize spaces
+                .replace(/^\W+|\W+$/g, ''); // Remove non-word chars at start/end
+        }).filter(Boolean); // Remove any empty strings
+
+        // Check for and split items that contain newlines
+        const expandedTopics: string[] = [];
+        for (const topic of agendaItem.meetingTopics) {
+            if (topic.includes("\n")) {
+                // This is likely two topics combined with a newline
+                // Split them and add each part separately
+                const parts = topic.split("\n").map(part => part.trim()).filter(Boolean);
+                expandedTopics.push(...parts);
+            } else {
+                expandedTopics.push(topic);
+            }
+        }
+
+        // Replace with the expanded list
+        agendaItem.meetingTopics = expandedTopics;
     }
 
     // Parse discussion points
     const discussionPointsMatch = content.match(/#### (?:Discussion Points|In this meeting we discussed):([\s\S]*?)(?=\n#### |$)/);
     if (discussionPointsMatch) {
-        const points = discussionPointsMatch[1].match(/- ([^\n]+)/g) || [];
-        agendaItem.discussionPoints = points.map((p: string) => p.replace(/- /, '').trim());
+        // Updated to match each bullet point line more precisely
+        const points = discussionPointsMatch[1].match(/^- ([^\n]+)/gm) || [];
+        agendaItem.discussionPoints = points.map((p: string) => {
+            // Normalize discussion points text
+            let text = p.replace(/^- /, '').trim();
+
+            // Ensure complete sentences by adding periods if missing
+            if (!text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?')) {
+                text += '.';
+            }
+
+            return text;
+        });
     }
 
     // Parse action items
@@ -275,7 +523,7 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
             if (!block.trim()) continue;
 
             // Extract the full line that contains the action and possibly metadata
-            const actionFullLine = block.match(/- \[\*\*action\*\*\].*$/m);
+            const actionFullLine = block.match(/^- \[\*\*action\*\*\].*$/m);
 
             if (actionFullLine) {
                 const fullLineText = actionFullLine[0];
@@ -295,7 +543,8 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
                     // Handle case where all metadata is on the same line as the action
 
                     // Extract action text - it's everything between "[**action**]" and the first metadata tag
-                    const actionExtract = fullLineText.match(/- \[\*\*action\*\*\] (.*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*due\*\*\]|\s+\[\*\*status\*\*\]|$)/);
+                    // Updated regex to properly handle text with internal hyphens
+                    const actionExtract = fullLineText.match(/^- \[\*\*action\*\*\] (.*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*due\*\*\]|\s+\[\*\*status\*\*\]|$)/);
                     actionText = actionExtract ? actionExtract[1].trim() : '';
 
                     // Extract assignee
@@ -311,7 +560,7 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
                     status = statusMatch ? statusMatch[1].trim() : '';
                 } else {
                     // Extract the main action text (without metadata)
-                    const actionLineMatch = block.match(/- \[\*\*action\*\*\] ([^\n]+)/);
+                    const actionLineMatch = block.match(/^- \[\*\*action\*\*\] ([^\n]+)/m);
                     actionText = actionLineMatch ? actionLineMatch[1].trim() : '';
 
                     // Look for assignee and status on the following line without a dash
@@ -340,11 +589,18 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
 
                 // Create the action item if we have any text
                 if (actionText) {
-                    const actionItem = {
+                    interface ActionItem {
+                        text: string;
+                        assignee: string;
+                        status: string;
+                        dueDate?: string;
+                    }
+
+                    const actionItem: ActionItem = {
                         text: actionText,
                         assignee: assignee,
                         status: status
-                    } as any;
+                    };
 
                     if (dueDate) {
                         actionItem.dueDate = dueDate;
@@ -359,15 +615,49 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
     // Parse decision items
     const decisionItemsMatch = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/);
     if (decisionItemsMatch) {
-        const decisionBlocks = decisionItemsMatch[1].split(/(?=- [^\n]+\n  - \[\*\*(?:effect|rationale|opposing)\*\*\])/);
+        // The previous splitting approach was causing issues with hyphens inside decision text
+        // Instead, let's extract decision blocks more precisely by finding all lines that look like top-level bullet points
+        const decisionText = decisionItemsMatch[1].trim();
+        const decisionLines = decisionText.split('\n');
 
+        let currentDecisionBlock = '';
+        const decisionBlocks: string[] = [];
+
+        // Process line by line to build decision blocks
+        for (let i = 0; i < decisionLines.length; i++) {
+            const line = decisionLines[i];
+
+            // If this line starts a new decision (top-level bullet point)
+            if (line.match(/^\s*-\s+(?!\[\*\*)/)) {
+                // If we were already building a block, save it
+                if (currentDecisionBlock) {
+                    decisionBlocks.push(currentDecisionBlock);
+                }
+                // Start a new block
+                currentDecisionBlock = line;
+            } else {
+                // Add this line to the current block
+                if (currentDecisionBlock) {
+                    currentDecisionBlock += '\n' + line;
+                }
+            }
+        }
+
+        // Add the last block if there is one
+        if (currentDecisionBlock) {
+            decisionBlocks.push(currentDecisionBlock);
+        }
+
+        // Process each decision block
         for (const block of decisionBlocks) {
             if (!block.trim()) continue;
 
-            const decisionMatch = block.match(/- ([^\n]+)/);
-            const effectMatch = block.match(/  - \[\*\*effect\*\*\] ([^\n]+)/);
-            const rationaleMatch = block.match(/  - \[\*\*rationale\*\*\] ([^\n]+)/);
-            const opposingMatch = block.match(/  - \[\*\*opposing\*\*\] ([^\n]+)/);
+            // Match the decision text (first line after removing the bullet)
+            const decisionMatch = block.match(/^\s*-\s+([^\n]+)/m);
+            // Match metadata lines
+            const effectMatch = block.match(/\s*-\s+\[\*\*effect\*\*\]\s+([^\n]+)/);
+            const rationaleMatch = block.match(/\s*-\s+\[\*\*rationale\*\*\]\s+([^\n]+)/);
+            const opposingMatch = block.match(/\s*-\s+\[\*\*opposing\*\*\]\s+([^\n]+)/);
 
             if (decisionMatch) {
                 const decisionItem = {
@@ -414,21 +704,21 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
     // Parse Learning Points
     const learningPointsMatch = content.match(/#### Learning Points:([\s\S]*?)(?=\n#### |$)/);
     if (learningPointsMatch) {
-        const points = learningPointsMatch[1].match(/- ([^\n]+)/g) || [];
-        agendaItem.learningPoints = points.map((p: string) => p.replace(/- /, '').trim());
+        const points = learningPointsMatch[1].match(/^- ([^\n]+)/gm) || [];
+        agendaItem.learningPoints = points.map((p: string) => p.replace(/^- /, '').trim());
     }
 
     // Parse Issues
     const issuesMatch = content.match(/#### (?:Issues|To carry over for next meeting):([\s\S]*?)(?=\n#### |$)/);
     if (issuesMatch) {
-        const issues = issuesMatch[1].match(/- ([^\n]+)/g) || [];
-        agendaItem.issues = issues.map((i: string) => i.replace(/- /, '').trim());
+        const issues = issuesMatch[1].match(/^- ([^\n]+)/gm) || [];
+        agendaItem.issues = issues.map((i: string) => i.replace(/^- /, '').trim());
     }
 
     // Parse Leaderboard
     const leaderboardMatch = content.match(/#### Leaderboard:([\s\S]*?)(?=\n#### |$)/);
     if (leaderboardMatch) {
-        const items = leaderboardMatch[1].match(/- [^\n]+/g) || [];
-        agendaItem.leaderboard = items.map((i: string) => i.replace(/- \d+(?:st|nd|rd|th) /, '').trim());
+        const items = leaderboardMatch[1].match(/^- [^\n]+/gm) || [];
+        agendaItem.leaderboard = items.map((i: string) => i.replace(/^- \d+(?:st|nd|rd|th) /, '').trim());
     }
 } 

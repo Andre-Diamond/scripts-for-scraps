@@ -1,12 +1,35 @@
 // Type definitions for better type safety
+// Remove unused imports
+import { } from './types';
+
 export interface SummaryData {
-    [key: string]: any;
+    [key: string]: unknown;
+    summary?: SummaryData;
+    meetingInfo?: { peoplePresent?: string | string[] };
+    agendaItems?: AgendaItemLike[];
+}
+
+export interface AgendaItemLike {
+    peoplePresent?: string[];
+    discussionPoints?: string[] | string[][];
+    actionItems?: ActionItemLike[];
+    decisionItems?: DecisionItemLike[];
+}
+
+export interface ActionItemLike {
+    text?: string;
+    [key: string]: unknown;
+}
+
+export interface DecisionItemLike {
+    decision?: string;
+    [key: string]: unknown;
 }
 
 export interface Difference {
     field: string;
-    gitbook: any;
-    supabase: any;
+    gitbook: unknown;
+    supabase: unknown;
 }
 
 // Function to compare a GitBook entry with a Supabase entry
@@ -33,26 +56,49 @@ function preprocessData(data: SummaryData): SummaryData {
     // Deep clone to avoid modifying the original
     const processed = JSON.parse(JSON.stringify(data));
 
+    // Sort peoplePresent for meetingInfo if it exists
+    if (processed.meetingInfo && processed.meetingInfo.peoplePresent) {
+        // If it's a comma-separated string, split, sort, and join back
+        if (typeof processed.meetingInfo.peoplePresent === 'string') {
+            const people = processed.meetingInfo.peoplePresent
+                .split(',')
+                .map((p: string) => p.trim())
+                .filter(Boolean);
+
+            // Sort alphabetically (case-insensitive)
+            people.sort((a: string, b: string) =>
+                a.toLowerCase().localeCompare(b.toLowerCase()));
+
+            processed.meetingInfo.peoplePresent = people.join(', ');
+        }
+    }
+
     // If data has agendaItems, process each item
     if (processed.agendaItems && Array.isArray(processed.agendaItems)) {
-        processed.agendaItems = processed.agendaItems.map((item: any) => {
+        processed.agendaItems = processed.agendaItems.map((item: AgendaItemLike) => {
+            // Sort peoplePresent in each agenda item if it exists as an array
+            if (item.peoplePresent && Array.isArray(item.peoplePresent)) {
+                item.peoplePresent.sort((a: string, b: string) =>
+                    a.toLowerCase().localeCompare(b.toLowerCase()));
+            }
+
             // Process discussionPoints
             if (item.discussionPoints) {
                 // Ensure discussionPoints is an array of strings (not characters)
                 if (Array.isArray(item.discussionPoints)) {
                     // Convert each item to a string and clean it
-                    item.discussionPoints = item.discussionPoints.map((point: any) => {
+                    item.discussionPoints = item.discussionPoints.map((point: unknown) => {
                         if (typeof point === 'string') {
                             return cleanString(point);
                         }
-                        return point;
-                    });
+                        return String(point);
+                    }) as string[];
                 }
             }
 
             // Process actionItems
             if (item.actionItems && Array.isArray(item.actionItems)) {
-                item.actionItems = item.actionItems.map((action: any) => {
+                item.actionItems = item.actionItems.map((action: ActionItemLike) => {
                     if (action.text) {
                         // Clean action text and remove metadata tags
                         action.text = cleanActionText(action.text);
@@ -63,7 +109,7 @@ function preprocessData(data: SummaryData): SummaryData {
 
             // Process decisionItems
             if (item.decisionItems && Array.isArray(item.decisionItems)) {
-                item.decisionItems = item.decisionItems.map((decision: any) => {
+                item.decisionItems = item.decisionItems.map((decision: DecisionItemLike) => {
                     if (decision.decision) {
                         // Clean decision text and normalize year references
                         decision.decision = cleanDecisionText(decision.decision);
@@ -115,7 +161,7 @@ function cleanString(text: string): string {
 }
 
 // Helper function to normalize strings for comparison
-function normalizeString(str: any): string {
+function normalizeString(str: unknown): string {
     if (typeof str !== 'string') return String(str);
 
     // Trim whitespace, normalize spacing, and convert to lowercase
@@ -146,9 +192,24 @@ function normalizeString(str: any): string {
 function compareObjects(gitbook: SummaryData, supabase: SummaryData, path: string = ''): Difference[] {
     const differences: Difference[] = [];
 
-    // Specifically handle discussionPoints differently
+    // Special handling for discussionPoints array path
     if (path.includes('discussionPoints')) {
         // For discussionPoints, we want to compare whole strings, not character by character
+        if (typeof gitbook === 'string' && typeof supabase === 'string') {
+            if (normalizeString(gitbook) !== normalizeString(supabase)) {
+                differences.push({
+                    field: path,
+                    gitbook: gitbook,
+                    supabase: supabase
+                });
+            }
+            return differences;
+        }
+    }
+
+    // Special handling for meetingTopics array path
+    if (path.includes('meetingTopics')) {
+        // For meetingTopics, we want to compare whole strings, not character by character
         if (typeof gitbook === 'string' && typeof supabase === 'string') {
             if (normalizeString(gitbook) !== normalizeString(supabase)) {
                 differences.push({
@@ -197,8 +258,12 @@ function compareObjects(gitbook: SummaryData, supabase: SummaryData, path: strin
         }
     }
 
+    // Adding null checks and handling empty objects for the gitbook and supabase
+    const gitbookKeys = gitbook ? Object.keys(gitbook) : [];
+    const supabaseKeys = supabase ? Object.keys(supabase) : [];
+
     // Compare primitive values and collect differences
-    for (const key of new Set([...Object.keys(gitbook || {}), ...Object.keys(supabase || {})])) {
+    for (const key of new Set([...gitbookKeys, ...supabaseKeys])) {
         const currentPath = path ? `${path}.${key}` : key;
         const gitbookValue = gitbook?.[key];
         const supabaseValue = supabase?.[key];
@@ -206,6 +271,11 @@ function compareObjects(gitbook: SummaryData, supabase: SummaryData, path: strin
         // Skip comparison for specific fields that we don't want to report differences on
         if (currentPath.includes('discussionPoints') && /\.\d+\.\d+$/.test(currentPath)) {
             continue; // Skip character-by-character comparison for discussionPoints
+        }
+
+        // Skip character-by-character comparison for meetingTopics too
+        if (currentPath.includes('meetingTopics') && /\.\d+\.\d+$/.test(currentPath)) {
+            continue;
         }
 
         // Compare types
@@ -221,13 +291,15 @@ function compareObjects(gitbook: SummaryData, supabase: SummaryData, path: strin
         // Handle objects and arrays
         if (typeof gitbookValue === 'object' && gitbookValue !== null) {
             if (Array.isArray(gitbookValue)) {
-                if (!Array.isArray(supabaseValue) || gitbookValue.length !== supabaseValue.length) {
+                const supabaseValueArray = Array.isArray(supabaseValue) ? supabaseValue : [];
+
+                if (!Array.isArray(supabaseValue) || gitbookValue.length !== supabaseValueArray.length) {
                     // Only report array length differences for non-discussionPoints
                     if (!currentPath.includes('discussionPoints')) {
                         differences.push({
                             field: `${currentPath}.length`,
                             gitbook: gitbookValue.length,
-                            supabase: supabaseValue?.length || 0
+                            supabase: supabaseValueArray.length
                         });
                     }
                 }
@@ -236,7 +308,9 @@ function compareObjects(gitbook: SummaryData, supabase: SummaryData, path: strin
                 if (Array.isArray(supabaseValue)) {
                     // For discussionPoints arrays, compare element by element
                     if (currentPath === 'agendaItems.discussionPoints' ||
-                        currentPath.match(/agendaItems\[\d+\]\.discussionPoints$/)) {
+                        currentPath.match(/agendaItems\[\d+\]\.discussionPoints$/) ||
+                        currentPath === 'agendaItems.meetingTopics' ||
+                        currentPath.match(/agendaItems\[\d+\]\.meetingTopics$/)) {
                         const maxLen = Math.max(gitbookValue.length, supabaseValue.length);
                         for (let i = 0; i < maxLen; i++) {
                             const gitItem = gitbookValue[i];
@@ -267,8 +341,8 @@ function compareObjects(gitbook: SummaryData, supabase: SummaryData, path: strin
                         for (let i = 0; i < gitbookValue.length; i++) {
                             if (i < supabaseValue.length) {
                                 differences.push(...compareObjects(
-                                    gitbookValue[i],
-                                    supabaseValue[i],
+                                    gitbookValue[i] as SummaryData,
+                                    supabaseValue[i] as SummaryData,
                                     `${currentPath}[${i}]`
                                 ));
                             }
@@ -277,7 +351,11 @@ function compareObjects(gitbook: SummaryData, supabase: SummaryData, path: strin
                 }
             } else {
                 // Regular object comparison
-                differences.push(...compareObjects(gitbookValue, supabaseValue, currentPath));
+                differences.push(...compareObjects(
+                    gitbookValue as SummaryData,
+                    supabaseValue as SummaryData,
+                    currentPath
+                ));
             }
         } else if (typeof gitbookValue === 'string' && typeof supabaseValue === 'string') {
             // String comparison with normalization
