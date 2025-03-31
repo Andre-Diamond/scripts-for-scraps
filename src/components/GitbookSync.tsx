@@ -12,6 +12,7 @@ import { MeetingSummary, DatabaseRecord } from '../../types';
 import { applyWorkgroupOrder } from '../utils/orderMapping';
 import { removeEmptyValues } from '../utils/cleanUtils';
 import { convertParsedDataToMeetingSummary } from '../utils/dataConverters';
+import { commitFile, formatMeetingPath } from '../services/clientGithubService';
 
 interface GitHubItem {
   type: string;
@@ -32,6 +33,11 @@ interface ComparisonResult {
   supabaseData: MeetingSummary | null;
   orderedSupabaseData: MeetingSummary | null;
   differences: ComparisonDifference[];
+  commitStatus?: {
+    gitbookCommitted?: boolean;
+    supabaseCommitted?: boolean;
+    bothCommitted?: boolean;
+  };
 }
 
 export default function GitbookSync() {
@@ -50,6 +56,7 @@ export default function GitbookSync() {
   const [years, setYears] = useState<string[]>([]);
   const [months, setMonths] = useState<string[]>([]);
   const [files, setFiles] = useState<string[]>([]);
+  const [committing, setCommitting] = useState<{ [key: string]: boolean }>({});
 
   // Fetch years from the timeline directory
   const fetchYears = async () => {
@@ -330,6 +337,169 @@ export default function GitbookSync() {
     }
   };
 
+  // Helper function to update the commit status of a specific result
+  const updateResultCommitStatus = (index: number, status: Partial<ComparisonResult['commitStatus']>) => {
+    const newResults = [...comparisonResults];
+    const currentStatus = newResults[index].commitStatus || {};
+    newResults[index].commitStatus = { ...currentStatus, ...status };
+    setComparisonResults(newResults);
+  };
+
+  // Commit GitBook data to GitHub
+  const commitGitbookData = async (result: ComparisonResult, index: number) => {
+    try {
+      const commitId = `${result.workgroup}-${index}`;
+      setCommitting(prev => ({ ...prev, [commitId]: true }));
+
+      // Generate appropriate file path for the GitBook data
+      const basePath = formatMeetingPath(
+        result.filePath,
+        result.workgroup,
+        result.gitbookData.meetingInfo?.date
+      );
+
+      if (!basePath) {
+        throw new Error('Could not generate file path from meeting data');
+      }
+
+      const gitbookPath = `${basePath}/gitbook-data.json`;
+      const changesViewPath = `${basePath}/changes-commit-view.json`;
+
+      // Commit the GitBook data to the original file
+      await commitFile(
+        gitbookPath,
+        JSON.stringify(result.orderedGitbookData, null, 2),
+        `Add GitBook data for ${result.workgroup} meeting on ${result.gitbookData.meetingInfo?.date}`
+      );
+
+      // Also commit to the changes-commit-view.json file
+      const changesViewData = {
+        source: "gitbook",
+        timestamp: new Date().toISOString(),
+        workgroup: result.workgroup,
+        meetingDate: result.gitbookData.meetingInfo?.date,
+        data: result.orderedGitbookData
+      };
+
+      await commitFile(
+        changesViewPath,
+        JSON.stringify(changesViewData, null, 2),
+        `Update changes view with GitBook data for ${result.workgroup} meeting on ${result.gitbookData.meetingInfo?.date}`
+      );
+
+      // Update the commit status
+      updateResultCommitStatus(index, { gitbookCommitted: true });
+
+    } catch (error) {
+      setError(`Failed to commit GitBook data: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      const commitId = `${result.workgroup}-${index}`;
+      setCommitting(prev => ({ ...prev, [commitId]: false }));
+    }
+  };
+
+  // Commit Supabase data to GitHub
+  const commitSupabaseData = async (result: ComparisonResult, index: number) => {
+    if (!result.supabaseData) {
+      setError('No Supabase data to commit');
+      return;
+    }
+
+    try {
+      const commitId = `supabase-${result.workgroup}-${index}`;
+      setCommitting(prev => ({ ...prev, [commitId]: true }));
+
+      // Generate appropriate file path for the Supabase data
+      const basePath = formatMeetingPath(
+        result.filePath,
+        result.workgroup,
+        result.supabaseData.meetingInfo?.date
+      );
+
+      if (!basePath) {
+        throw new Error('Could not generate file path from meeting data');
+      }
+
+      const supabasePath = `${basePath}/supabase-data.json`;
+      const changesViewPath = `${basePath}/changes-commit-view.json`;
+
+      // Commit the Supabase data to the original file
+      await commitFile(
+        supabasePath,
+        JSON.stringify(result.orderedSupabaseData, null, 2),
+        `Add Supabase data for ${result.workgroup} meeting on ${result.supabaseData.meetingInfo?.date}`
+      );
+
+      // Also commit to the changes-commit-view.json file
+      const changesViewData = {
+        source: "supabase",
+        timestamp: new Date().toISOString(),
+        workgroup: result.workgroup,
+        meetingDate: result.supabaseData.meetingInfo?.date,
+        data: result.orderedSupabaseData
+      };
+
+      await commitFile(
+        changesViewPath,
+        JSON.stringify(changesViewData, null, 2),
+        `Update changes view with Supabase data for ${result.workgroup} meeting on ${result.supabaseData.meetingInfo?.date}`
+      );
+
+      // Update the commit status
+      updateResultCommitStatus(index, { supabaseCommitted: true });
+
+    } catch (error) {
+      setError(`Failed to commit Supabase data: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      const commitId = `supabase-${result.workgroup}-${index}`;
+      setCommitting(prev => ({ ...prev, [commitId]: false }));
+    }
+  };
+
+  // Commit both data files to GitHub
+  const commitBothDataFiles = async (result: ComparisonResult, index: number) => {
+    try {
+      const commitId = `both-${result.workgroup}-${index}`;
+      setCommitting(prev => ({ ...prev, [commitId]: true }));
+
+      // Generate appropriate file path for the data
+      const basePath = formatMeetingPath(
+        result.filePath,
+        result.workgroup,
+        result.gitbookData.meetingInfo?.date
+      );
+
+      if (!basePath) {
+        throw new Error('Could not generate file path from meeting data');
+      }
+
+      const changesPath = `${basePath}/data-differences.json`;
+
+      // Create a data object with only the differences
+      const changesData = {
+        workgroup: result.workgroup,
+        meetingDate: result.gitbookData.meetingInfo?.date,
+        differences: result.differences
+      };
+
+      // Commit the changes data
+      await commitFile(
+        changesPath,
+        JSON.stringify(changesData, null, 2),
+        `Add differences for ${result.workgroup} meeting on ${result.gitbookData.meetingInfo?.date}`
+      );
+
+      // Update the commit status
+      updateResultCommitStatus(index, { bothCommitted: true });
+
+    } catch (error) {
+      setError(`Failed to commit differences data: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      const commitId = `both-${result.workgroup}-${index}`;
+      setCommitting(prev => ({ ...prev, [commitId]: false }));
+    }
+  };
+
   // Initialize component by fetching years
   React.useEffect(() => {
     fetchYears();
@@ -454,14 +624,43 @@ export default function GitbookSync() {
               <div className="data-preview">
                 <div className="preview-column">
                   <h4>GitBook Data (Ordered):</h4>
-                  <JSONFormatter data={result.orderedGitbookData} />
+                  <JSONFormatter
+                    data={result.orderedGitbookData}
+                    showCommitButton={true}
+                    commitLabel={committing[`${result.workgroup}-${index}`] ? 'Committing...' : 'Commit GitBook Data'}
+                    onCommit={() => commitGitbookData(result, index)}
+                  />
+                  {result.commitStatus?.gitbookCommitted && (
+                    <div className="commit-success">✓ GitBook data committed</div>
+                  )}
                 </div>
 
                 {result.supabaseData && (
                   <div className="preview-column">
                     <h4>Supabase Data (Ordered):</h4>
-                    <JSONFormatter data={result.orderedSupabaseData} />
+                    <JSONFormatter
+                      data={result.orderedSupabaseData}
+                      showCommitButton={true}
+                      commitLabel={committing[`supabase-${result.workgroup}-${index}`] ? 'Committing...' : 'Commit Supabase Data'}
+                      onCommit={() => commitSupabaseData(result, index)}
+                    />
+                    {result.commitStatus?.supabaseCommitted && (
+                      <div className="commit-success">✓ Supabase data committed</div>
+                    )}
                   </div>
+                )}
+              </div>
+
+              <div className="commit-both-container">
+                <button
+                  className="commit-both-button"
+                  onClick={() => commitBothDataFiles(result, index)}
+                  disabled={committing[`both-${result.workgroup}-${index}`]}
+                >
+                  {committing[`both-${result.workgroup}-${index}`] ? 'Committing...' : 'Commit Data Comparison'}
+                </button>
+                {result.commitStatus?.bothCommitted && (
+                  <span className="commit-success">✓ Comparison data committed</span>
                 )}
               </div>
             </div>

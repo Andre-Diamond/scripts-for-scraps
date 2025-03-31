@@ -2,9 +2,17 @@ import React from 'react';
 
 interface JSONFormatterProps {
   data: unknown;
+  onCommit?: () => void;
+  commitLabel?: string;
+  showCommitButton?: boolean;
 }
 
-const JSONFormatter: React.FC<JSONFormatterProps> = ({ data }) => {
+const JSONFormatter: React.FC<JSONFormatterProps> = ({
+  data,
+  onCommit,
+  commitLabel = 'Commit',
+  showCommitButton = false
+}) => {
   // Format the JSON with syntax highlighting
   const formatJSON = (json: unknown): string => {
     // Convert to string if not already a string
@@ -39,9 +47,21 @@ const JSONFormatter: React.FC<JSONFormatterProps> = ({ data }) => {
   };
 
   return (
-    <pre
-      dangerouslySetInnerHTML={{ __html: formatJSON(data) }}
-    />
+    <div className="json-formatter-container">
+      {showCommitButton && onCommit && (
+        <div className="commit-button-container">
+          <button
+            className="commit-button"
+            onClick={onCommit}
+          >
+            {commitLabel}
+          </button>
+        </div>
+      )}
+      <pre
+        dangerouslySetInnerHTML={{ __html: formatJSON(data) }}
+      />
+    </div>
   );
 };
 

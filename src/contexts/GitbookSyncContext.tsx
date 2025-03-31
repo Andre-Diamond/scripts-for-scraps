@@ -13,6 +13,11 @@ interface ComparisonResult {
     gitbook: unknown;
     supabase: unknown;
   }>;
+  commitStatus?: {
+    gitbookCommitted?: boolean;
+    supabaseCommitted?: boolean;
+    bothCommitted?: boolean;
+  };
 }
 
 interface GitbookSyncContextType {
