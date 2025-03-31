@@ -1,0 +1,14 @@
+---
+description: Rules for parsing the Gitbook
+globs: 
+alwaysApply: false
+---
+
+# Rules for parsing the Gitbook
+
+- All the headings with three hashes are the workgroup names
+- All the headings with two hashes are the dates the meeting happened
+- All the meetings under a specific date heading happened on that day
+- The **facilitator** is the same as the meeting host that is fetched from the supabase data
+- All workgroups have different meeting summary templates
+- Please look at the structure of the supabase meeting summary data and you'll notice all summaries have at least one Agenda Item in the object
