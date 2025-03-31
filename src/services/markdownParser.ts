@@ -300,7 +300,7 @@ function parseSingleWorkgroup(
         let peoplePresent = presentText;
 
         // Extract facilitator
-        const facilitatorMatch = presentText.match(/([^,\[]+) \[\*\*facilitator\*\*\]/);
+        const facilitatorMatch = presentText.match(/([^,]+?) \[\*\*facilitator\*\*\]/);
         if (facilitatorMatch) {
             parsedData.meetingInfo.host = facilitatorMatch[1].trim();
             peoplePresent = peoplePresent.replace(/\[\*\*facilitator\*\*\]/, '');

@@ -8,6 +8,64 @@ import {
     DecisionItem
 } from '../../types';
 
+// Helper function to normalize special characters
+function normalizeSpecialCharacters(text: string): string {
+    const charMap: Record<string, string> = {
+        'Ã©': 'é',
+        'Ã¨': 'è',
+        'Ã«': 'ë',
+        'Ã¯': 'ï',
+        'Ã®': 'î',
+        'Ã¢': 'â',
+        'Ã ': 'à',
+        'Ã¤': 'ä',
+        'Ã¥': 'å',
+        'Ã¦': 'æ',
+        'Ã§': 'ç',
+        'Ã±': 'ñ',
+        'Ã³': 'ó',
+        'Ã²': 'ò',
+        'Ã¶': 'ö',
+        'Ã´': 'ô',
+        'Ã¸': 'ø',
+        'Ã¼': 'ü',
+        'Ã»': 'û',
+        'Ã¹': 'ù',
+        'Ã½': 'ý',
+        '\u0160': 'Š',
+        '\u0161': 'š',
+        '\u017D': 'Ž',
+        '\u017E': 'ž',
+        '\u0153': 'œ',
+        '\u0152': 'Œ',
+        'Ã': 'Á',
+        'Â': 'À'
+    };
+
+    return text.replace(/Ã.|[\u0152-\u017E]|Â/g, match => charMap[match] || match);
+}
+
+// Helper function to recursively normalize special characters in an object
+function normalizeObjectCharacters<T>(obj: T): T {
+    if (typeof obj === 'string') {
+        return normalizeSpecialCharacters(obj) as T;
+    }
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => normalizeObjectCharacters(item)) as T;
+    }
+
+    if (obj !== null && typeof obj === 'object') {
+        const normalized = {} as T;
+        for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+            (normalized as Record<string, unknown>)[key] = normalizeObjectCharacters(value);
+        }
+        return normalized;
+    }
+
+    return obj;
+}
+
 /**
  * Converts ParsedMeetingData from the markdown parser to the MeetingSummary type
  * used in the application
@@ -29,8 +87,8 @@ export function convertToMeetingSummary(data: ParsedMeetingData): MeetingSummary
     // Convert agendaItems from service format to app format
     const agendaItems = data.agendaItems.map(convertAgendaItem);
 
-    // Return the converted MeetingSummary
-    return {
+    // Create the initial MeetingSummary
+    const summary: MeetingSummary = {
         workgroup: data.workgroup,
         workgroup_id: data.workgroup_id || '',
         meetingInfo: meetingInfo,
@@ -42,6 +100,9 @@ export function convertToMeetingSummary(data: ParsedMeetingData): MeetingSummary
         noSummaryGivenText: data.noSummaryGivenText || '',
         canceledSummaryText: data.canceledSummaryText || ''
     };
+
+    // Normalize special characters in the entire object
+    return normalizeObjectCharacters(summary);
 }
 
 /**

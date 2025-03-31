@@ -133,17 +133,46 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
         console.log('Original peoplePresent text from markdown:', peopleText);
 
         // If the list is formatted as bullet points
-        const bulletPoints = peopleText.match(/^-\s+([^\n]+)/gm);
+        const bulletPoints = peopleText.match(/^-\s+(.+)$/gm);
         if (bulletPoints && bulletPoints.length > 0) {
-            agendaItem.peoplePresent = bulletPoints.map(p => p.replace(/^-\s+/, '').trim());
+            // Extract the full line after the bullet point, preserving any brackets
+            agendaItem.peoplePresent = bulletPoints.map(p => {
+                // Extract the name part after the bullet point, including any brackets
+                const nameMatch = p.match(/^-\s+(.+?)(?:\s*\[([^\]]+)\])?(?:\s*\[([^\]]+)\])*\s*$/);
+                if (nameMatch) {
+                    const baseName = nameMatch[1].trim();
+                    const tags = [nameMatch[2], nameMatch[3]].filter(Boolean);
+                    return tags.length > 0 ? `${baseName} [${tags.join('][')}]` : baseName;
+                }
+                return p.replace(/^-\s+/, '').trim();
+            });
         } else {
             // Otherwise, try comma-separated list
-            const people = peopleText.split(',').map(p => p.trim()).filter(Boolean);
+            // Split by commas but preserve text in square brackets
+            const people = peopleText.split(/,(?![^\[]*\])/).map(p => {
+                // For each person, extract their name and any brackets
+                const nameMatch = p.match(/(.+?)(?:\s*\[([^\]]+)\])?(?:\s*\[([^\]]+)\])*\s*$/);
+                if (nameMatch) {
+                    const baseName = nameMatch[1].trim();
+                    const tags = [nameMatch[2], nameMatch[3]].filter(Boolean);
+                    return tags.length > 0 ? `${baseName} [${tags.join('][')}]` : baseName;
+                }
+                return p.trim();
+            }).filter(Boolean);
             if (people.length > 0) {
                 agendaItem.peoplePresent = people;
             } else {
                 // Last option: split by newlines
-                const lines = peopleText.split('\n').map(line => line.trim()).filter(Boolean);
+                const lines = peopleText.split('\n').map(line => {
+                    // For each line, extract the name and any brackets
+                    const nameMatch = line.match(/(.+?)(?:\s*\[([^\]]+)\])?(?:\s*\[([^\]]+)\])*\s*$/);
+                    if (nameMatch) {
+                        const baseName = nameMatch[1].trim();
+                        const tags = [nameMatch[2], nameMatch[3]].filter(Boolean);
+                        return tags.length > 0 ? `${baseName} [${tags.join('][')}]` : baseName;
+                    }
+                    return line.trim();
+                }).filter(Boolean);
                 agendaItem.peoplePresent = lines;
             }
         }
@@ -155,7 +184,15 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
     if (facilitatorMatch) {
         const originalFacilitator = facilitatorMatch[1].trim();
         console.log('Original facilitator text from markdown:', originalFacilitator);
-        agendaItem.facilitator = originalFacilitator;
+        // Extract facilitator name with any brackets
+        const nameMatch = originalFacilitator.match(/(.+?)(?:\s*\[([^\]]+)\])?(?:\s*\[([^\]]+)\])*\s*$/);
+        if (nameMatch) {
+            const baseName = nameMatch[1].trim();
+            const tags = [nameMatch[2], nameMatch[3]].filter(Boolean);
+            agendaItem.facilitator = tags.length > 0 ? `${baseName} [${tags.join('][')}]` : baseName;
+        } else {
+            agendaItem.facilitator = originalFacilitator;
+        }
         console.log('Preserved original case for facilitator:', agendaItem.facilitator);
     }
 
@@ -164,7 +201,15 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
     if (documenterMatch) {
         const originalDocumenter = documenterMatch[1].trim();
         console.log('Original documenter text from markdown:', originalDocumenter);
-        agendaItem.documenter = originalDocumenter;
+        // Extract documenter name with any brackets
+        const nameMatch = originalDocumenter.match(/(.+?)(?:\s*\[([^\]]+)\])?(?:\s*\[([^\]]+)\])*\s*$/);
+        if (nameMatch) {
+            const baseName = nameMatch[1].trim();
+            const tags = [nameMatch[2], nameMatch[3]].filter(Boolean);
+            agendaItem.documenter = tags.length > 0 ? `${baseName} [${tags.join('][')}]` : baseName;
+        } else {
+            agendaItem.documenter = originalDocumenter;
+        }
         console.log('Preserved original case for documenter:', agendaItem.documenter);
     }
 
@@ -548,15 +593,15 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
                     actionText = actionExtract ? actionExtract[1].trim() : '';
 
                     // Extract assignee
-                    const assigneeMatch = fullLineText.match(/\[\*\*assignee\*\*\] ([^\[\]]*?)(?=\s+\[\*\*due\*\*\]|\s+\[\*\*status\*\*\]|$)/);
+                    const assigneeMatch = fullLineText.match(/\[\*\*assignee\*\*\] (.*?)(?=\s+\[\*\*due\*\*\]|\s+\[\*\*status\*\*\]|$)/);
                     assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
 
                     // Extract due date
-                    const dueMatch = fullLineText.match(/\[\*\*due\*\*\] ([^\[\]]*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*status\*\*\]|$)/);
+                    const dueMatch = fullLineText.match(/\[\*\*due\*\*\] (.*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*status\*\*\]|$)/);
                     dueDate = dueMatch ? dueMatch[1].trim() : '';
 
                     // Extract status
-                    const statusMatch = fullLineText.match(/\[\*\*status\*\*\] ([^\[\]]*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*due\*\*\]|$)/);
+                    const statusMatch = fullLineText.match(/\[\*\*status\*\*\] (.*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*due\*\*\]|$)/);
                     status = statusMatch ? statusMatch[1].trim() : '';
                 } else {
                     // Extract the main action text (without metadata)
@@ -568,18 +613,18 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
 
                     if (metadataLine) {
                         // Extract metadata from the line following the action
-                        const assigneeMatch = block.match(/\[\*\*assignee\*\*\]\s+([^\[\]]+?)(?=\s+\[\*\*|\s*$)/);
-                        const statusMatch = block.match(/\[\*\*status\*\*\]\s+([^\[\]]+?)(?=\s+\[\*\*|\s*$)/);
-                        const dueMatch = block.match(/\[\*\*due\*\*\]\s+([^\[\]]+?)(?=\s+\[\*\*|\s*$)/);
+                        const assigneeMatch = block.match(/\[\*\*assignee\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
+                        const statusMatch = block.match(/\[\*\*status\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
+                        const dueMatch = block.match(/\[\*\*due\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
 
                         assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
                         status = statusMatch ? statusMatch[1].trim() : '';
                         dueDate = dueMatch ? dueMatch[1].trim() : '';
                     } else {
                         // Fall back to original format with dashes if no metadata line is found
-                        const assigneeMatch = block.match(/\n\s+- \[\*\*assignee\*\*\] ([^\n]+)/);
-                        const statusMatch = block.match(/\n\s+- \[\*\*status\*\*\] ([^\n]+)/);
-                        const dueMatch = block.match(/\n\s+- \[\*\*due\*\*\] ([^\n]+)/);
+                        const assigneeMatch = block.match(/\n\s+- \[\*\*assignee\*\*\] (.*?)(?=\n|$)/);
+                        const statusMatch = block.match(/\n\s+- \[\*\*status\*\*\] (.*?)(?=\n|$)/);
+                        const dueMatch = block.match(/\n\s+- \[\*\*due\*\*\] (.*?)(?=\n|$)/);
 
                         assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
                         status = statusMatch ? statusMatch[1].trim() : '';
