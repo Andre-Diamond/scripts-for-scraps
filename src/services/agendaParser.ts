@@ -605,26 +605,49 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
                     status = statusMatch ? statusMatch[1].trim() : '';
                 } else {
                     // Extract the main action text (without metadata)
-                    const actionLineMatch = block.match(/^- \[\*\*action\*\*\] ([^\n]+)/m);
+                    const actionLineMatch = block.match(/^- \[\*\*action\*\*\] ([^\n]*)/m);
                     actionText = actionLineMatch ? actionLineMatch[1].trim() : '';
 
-                    // Look for assignee and status on the following line without a dash
-                    const metadataLine = block.match(/\n\s+\[\*\*assignee\*\*\]|\n\s+\[\*\*status\*\*\]|\n\s+\[\*\*due\*\*\]/);
+                    // For cases where the action text continues on next lines before metadata
+                    const blockLines = block.split('\n');
+                    const actionStartIndex = blockLines.findIndex(line => line.match(/^- \[\*\*action\*\*\]/));
+                    const metadataStartIndex = blockLines.findIndex((line, idx) =>
+                        idx > actionStartIndex &&
+                        (line.includes('[**assignee**]') ||
+                            line.includes('[**due**]') ||
+                            line.includes('[**status**]'))
+                    );
 
-                    if (metadataLine) {
-                        // Extract metadata from the line following the action
-                        const assigneeMatch = block.match(/\[\*\*assignee\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-                        const statusMatch = block.match(/\[\*\*status\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-                        const dueMatch = block.match(/\[\*\*due\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
+                    // If we found metadata on a different line
+                    if (metadataStartIndex !== -1) {
+                        // Collect any action text that appears between the action start and metadata
+                        if (metadataStartIndex > actionStartIndex + 1) {
+                            const continuationLines = blockLines
+                                .slice(actionStartIndex + 1, metadataStartIndex)
+                                .map(line => line.trim())
+                                .filter(line => line && !line.startsWith('[**'))
+                                .join(' ');
+                            if (continuationLines) {
+                                actionText += ' ' + continuationLines;
+                            }
+                        }
+
+                        // Join all remaining lines for metadata extraction
+                        const metadataText = blockLines.slice(metadataStartIndex).join(' ');
+
+                        // Extract metadata from the combined text
+                        const assigneeMatch = metadataText.match(/\[\*\*assignee\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
+                        const statusMatch = metadataText.match(/\[\*\*status\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
+                        const dueMatch = metadataText.match(/\[\*\*due\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
 
                         assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
                         status = statusMatch ? statusMatch[1].trim() : '';
                         dueDate = dueMatch ? dueMatch[1].trim() : '';
                     } else {
                         // Fall back to original format with dashes if no metadata line is found
-                        const assigneeMatch = block.match(/\n\s+- \[\*\*assignee\*\*\] (.*?)(?=\n|$)/);
-                        const statusMatch = block.match(/\n\s+- \[\*\*status\*\*\] (.*?)(?=\n|$)/);
-                        const dueMatch = block.match(/\n\s+- \[\*\*due\*\*\] (.*?)(?=\n|$)/);
+                        const assigneeMatch = block.match(/\[\*\*assignee\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
+                        const statusMatch = block.match(/\[\*\*status\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
+                        const dueMatch = block.match(/\[\*\*due\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
 
                         assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
                         status = statusMatch ? statusMatch[1].trim() : '';

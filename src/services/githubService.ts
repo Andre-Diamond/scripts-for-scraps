@@ -22,6 +22,8 @@ export async function fetchFileContent(path: string) {
     }
 
     const data = await response.json();
-    // GitHub API returns content as base64 encoded
-    return atob(data.content);
+    // Decode base64 to bytes
+    const bytes = Uint8Array.from(atob(data.content), c => c.charCodeAt(0));
+    // Convert bytes to UTF-8 string
+    return new TextDecoder('utf-8').decode(bytes);
 } 

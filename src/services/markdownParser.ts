@@ -1,5 +1,6 @@
 import { extractDateHeadings, findClosestDate } from './dateUtils';
 import { parseAgendaContent, hasAgendaContent } from './agendaParser';
+import he from 'he';
 import {
     ParsedMeetingData,
     AgendaItem,
@@ -64,6 +65,9 @@ export function parseMarkdownToJson(
     if (!markdown || markdown.trim() === '') {
         return { error: 'No content to parse' };
     }
+
+    // Decode any HTML entities in the content
+    markdown = he.decode(markdown);
 
     // First, identify all date headings in the document
     const dateHeadings = extractDateHeadings(markdown);
