@@ -622,34 +622,56 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
         }
     }
 
-    // Parse decision items
-    const decisionItemsMatch = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/);
-    if (decisionItemsMatch) {
-        // Split by top-level bullet points while preserving all content
-        const decisionText = decisionItemsMatch[1].trim();
-        const decisionBlocks = decisionText.split(/(?=^\s*-\s+(?!\[\*\*))/m);
-
-        for (const block of decisionBlocks) {
-            if (!block.trim()) continue;
-
-            // Extract the main decision text - capture everything until the first metadata tag or end
-            const decisionMatch = block.match(/^\s*-\s+((?:(?!\s*-\s+\[\*\*(?:effect|rationale|opposing)\*\*\])[\s\S])*)/m);
-
-            // Extract metadata using non-greedy matches to avoid capturing too much
-            const effectMatch = block.match(/\s*-\s+\[\*\*effect\*\*\]\s+([\s\S]*?)(?=\s*-\s+\[\*\*|\s*$)/);
-            const rationaleMatch = block.match(/\s*-\s+\[\*\*rationale\*\*\]\s+([\s\S]*?)(?=\s*-\s+\[\*\*|\s*$)/);
-            const opposingMatch = block.match(/\s*-\s+\[\*\*opposing\*\*\]\s+([\s\S]*?)(?=\s*-\s+\[\*\*|\s*$)/);
-
-            if (decisionMatch) {
-                const decisionItem = {
-                    decision: decisionMatch[1].trim(),
-                    effect: effectMatch ? effectMatch[1].trim() : '',
-                    rationale: rationaleMatch ? rationaleMatch[1].trim() : '',
-                    opposing: opposingMatch ? opposingMatch[1].trim() : ''
-                };
-                agendaItem.decisionItems.push(decisionItem);
+    // Parse Decision Items
+    const decisionSection = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/i);
+    if (decisionSection) {
+      const lines = decisionSection[1].split('\n');
+      let i = 0;
+    
+      while (i < lines.length) {
+        // 1) find the next top-level bullet that is NOT metadata
+        if (/^\s*-\s+(?!\[\*\*)/.test(lines[i])) {
+          // 2) collect all lines up until the first metadata tag
+          const rawLines: string[] = [];
+          rawLines.push(lines[i].replace(/^\s*-\s+/, '')); // first line—drop leading "- "
+          i++;
+          while (
+            i < lines.length &&
+            !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
+          ) {
+            rawLines.push(lines[i]);
+            i++;
+          }
+          const decisionText = rawLines.join('\n').trim();
+    
+          // 3) now pull out any metadata tags immediately following
+          let rationale: string|undefined;
+          let opposing:  string|undefined;
+          let effect:    string|undefined;
+    
+          while (i < lines.length && /^\s*-\s+\[\*\*/.test(lines[i])) {
+            const m = lines[i].match(/^\s*-\s+\[\*\*(\w+)\*\*\]\s*(.+)$/);
+            if (m) {
+              const key = m[1].toLowerCase();
+              const val = m[2].trim();
+              if (key === 'rationale')  rationale = val;
+              else if (key === 'opposing') opposing = val;
+              else if (key === 'effect') effect    = val;
             }
+            i++;
+          }
+    
+          // 4) push a clean object—only include fields that exist
+          const item: any = { decision: decisionText };
+          if (rationale) item.rationale = rationale;
+          if (opposing)  item.opposing  = opposing;
+          if (effect)    item.effect    = effect;
+          agendaItem.decisionItems.push(item);
+    
+        } else {
+          i++;
         }
+      }
     }
 
     // Parse Town Hall Updates
