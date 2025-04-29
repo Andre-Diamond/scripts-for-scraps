@@ -5,7 +5,8 @@ export {
 } from './githubService';
 
 export {
-  fetchMeetingSummariesFromSupabase
+  fetchMeetingSummariesFromSupabase,
+  updateSupabaseMeetingSummary
 } from './supabaseService';
 
 export {

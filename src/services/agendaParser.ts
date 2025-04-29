@@ -543,14 +543,38 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
     // Parse discussion points
     const discussionPointsMatch = content.match(/#### (?:Discussion Points|In this meeting we discussed):([\s\S]*?)(?=\n#### |$)/);
     if (discussionPointsMatch) {
-        // Updated to match each bullet point line more precisely
-        const points = discussionPointsMatch[1].match(/^- ([^\n]+)/gm) || [];
-        agendaItem.discussionPoints = points.map((p: string) => {
+        const discussionText = discussionPointsMatch[1].trim();
+        const discussionLines = discussionText.split('\n');
+
+        const points: string[] = [];
+        let currentPoint = '';
+
+        for (const line of discussionLines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('- ')) {
+                // If we were building a previous point, save it
+                if (currentPoint) {
+                    points.push(currentPoint);
+                }
+                // Start new point
+                currentPoint = trimmedLine.substring(2);
+            } else if (trimmedLine && currentPoint) {
+                // Continue previous point
+                currentPoint += ' ' + trimmedLine;
+            }
+        }
+
+        // Add the last point if there is one
+        if (currentPoint) {
+            points.push(currentPoint);
+        }
+
+        agendaItem.discussionPoints = points.map(point => {
             // Normalize discussion points text
-            let text = p.replace(/^- /, '').trim();
+            let text = point.trim();
 
             // Ensure complete sentences by adding periods if missing
-            if (!text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?')) {
+            if (text && !text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?')) {
                 text += '.';
             }
 

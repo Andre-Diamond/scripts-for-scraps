@@ -4,7 +4,8 @@ import {
   fetchFileContent,
   fetchMeetingSummariesFromSupabase,
   parseMarkdownToJson,
-  compareSummaries
+  compareSummaries,
+  updateSupabaseMeetingSummary
 } from '../services/gitbookSyncService';
 import { useGitbookSync } from '../contexts/GitbookSyncContext';
 import JSONFormatter from './JSONFormatter';
@@ -57,6 +58,7 @@ export default function GitbookSync() {
   const [months, setMonths] = useState<string[]>([]);
   const [files, setFiles] = useState<string[]>([]);
   const [committing, setCommitting] = useState<{ [key: string]: boolean }>({});
+  const [updating, setUpdating] = useState<{ [key: string]: boolean }>({});
 
   // Fetch years from the timeline directory
   const fetchYears = async () => {
@@ -500,6 +502,38 @@ export default function GitbookSync() {
     }
   };
 
+  // Add this new function to handle database updates
+  const updateDatabase = async (result: ComparisonResult, index: number) => {
+    try {
+      const updateId = `update-${result.workgroup}-${index}`;
+      setUpdating(prev => ({ ...prev, [updateId]: true }));
+
+      // Update the Supabase database with the GitBook data
+      await updateSupabaseMeetingSummary(
+        result.workgroup,
+        result.gitbookData.meetingInfo?.date || '',
+        result.orderedGitbookData
+      );
+
+      // Show success message
+      setError(null);
+
+      // Refresh the comparison results to show updated data
+      // You might want to add a more targeted refresh mechanism
+      if (selectedFile) {
+        await compareSelected();
+      } else if (selectedMonth) {
+        await compareAll();
+      }
+
+    } catch (error) {
+      setError(`Failed to update database: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      const updateId = `update-${result.workgroup}-${index}`;
+      setUpdating(prev => ({ ...prev, [updateId]: false }));
+    }
+  };
+
   // Initialize component by fetching years
   React.useEffect(() => {
     fetchYears();
@@ -658,6 +692,13 @@ export default function GitbookSync() {
                   disabled={committing[`both-${result.workgroup}-${index}`]}
                 >
                   {committing[`both-${result.workgroup}-${index}`] ? 'Committing...' : 'Commit Data Comparison'}
+                </button>
+                <button
+                  className="update-database-button"
+                  onClick={() => updateDatabase(result, index)}
+                  disabled={updating[`update-${result.workgroup}-${index}`]}
+                >
+                  {updating[`update-${result.workgroup}-${index}`] ? 'Updating...' : 'Update Database'}
                 </button>
                 {result.commitStatus?.bothCommitted && (
                   <span className="commit-success">✓ Comparison data committed</span>

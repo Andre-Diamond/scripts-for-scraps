@@ -39,8 +39,8 @@ export function convertToMeetingSummary(data: ParsedMeetingData): MeetingSummary
         type: data.type as "Custom" | "Weekly" | "Monthly",
         noSummaryGiven: data.noSummaryGiven,
         canceledSummary: data.canceledSummary,
-        noSummaryGivenText: data.noSummaryGivenText || '',
-        canceledSummaryText: data.canceledSummaryText || ''
+        noSummaryGivenText: data.noSummaryGivenText || 'No Summary Given',
+        canceledSummaryText: data.canceledSummaryText || 'Meeting was cancelled'
     };
 }
 
@@ -71,9 +71,9 @@ function convertAgendaItem(item: ServiceAgendaItem): AppAgendaItem {
 function convertActionItem(item: ServiceActionItem): ActionItem {
     return {
         text: item.text || '',
+        status: (item.status as "todo" | "in-progress" | "done") || "todo",
         assignee: item.assignee || '',
-        dueDate: item.dueDate || '',
-        status: (item.status as "todo" | "in-progress" | "done") || "todo"
+        dueDate: item.dueDate || ''
     };
 }
 
