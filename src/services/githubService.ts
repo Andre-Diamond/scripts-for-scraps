@@ -29,8 +29,8 @@ export async function fetchFileContent(path: string) {
 }
 
 // GitHub API constants for commit service
-const TARGET_REPO_OWNER = 'Andre-Diamond';
-const TARGET_REPO_NAME = 'test';
+const TARGET_REPO_OWNER = 'Quality-Assurance-DAO';
+const TARGET_REPO_NAME = 'snet-archives-data-research';
 const TARGET_BRANCH = 'main';
 
 // Function to commit a file to GitHub

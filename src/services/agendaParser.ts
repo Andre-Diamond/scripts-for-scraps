@@ -591,115 +591,33 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
         for (const block of actionBlocks) {
             if (!block.trim()) continue;
 
-            // Extract the full line that contains the action and possibly metadata
-            const actionFullLine = block.match(/^- \[\*\*action\*\*\].*$/m);
+            // Extract the full action text - everything between [**action**] and the next metadata tag
+            const actionTextMatch = block.match(/^- \[\*\*action\*\*\]\s+((?:(?!\s*\[\*\*(?:assignee|due|status)\*\*\])[\s\S])*)/);
 
-            if (actionFullLine) {
-                const fullLineText = actionFullLine[0];
+            // Extract metadata using non-greedy matches
+            const assigneeMatch = block.match(/\[\*\*assignee\*\*\]\s+([\s\S]*?)(?=\s*\[\*\*|\s*$)/);
+            const statusMatch = block.match(/\[\*\*status\*\*\]\s+([\s\S]*?)(?=\s*\[\*\*|\s*$)/);
+            const dueMatch = block.match(/\[\*\*due\*\*\]\s+([\s\S]*?)(?=\s*\[\*\*|\s*$)/);
 
-                // Check if the action line already contains metadata
-                const containsInlineMetadata =
-                    fullLineText.includes("[**assignee**]") ||
-                    fullLineText.includes("[**due**]") ||
-                    fullLineText.includes("[**status**]");
-
-                let actionText = '';
-                let assignee = '';
-                let status = '';
-                let dueDate = '';
-
-                if (containsInlineMetadata) {
-                    // Handle case where all metadata is on the same line as the action
-
-                    // Extract action text - it's everything between "[**action**]" and the first metadata tag
-                    // Updated regex to properly handle text with internal hyphens
-                    const actionExtract = fullLineText.match(/^- \[\*\*action\*\*\] (.*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*due\*\*\]|\s+\[\*\*status\*\*\]|$)/);
-                    actionText = actionExtract ? actionExtract[1].trim() : '';
-
-                    // Extract assignee
-                    const assigneeMatch = fullLineText.match(/\[\*\*assignee\*\*\] (.*?)(?=\s+\[\*\*due\*\*\]|\s+\[\*\*status\*\*\]|$)/);
-                    assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
-
-                    // Extract due date
-                    const dueMatch = fullLineText.match(/\[\*\*due\*\*\] (.*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*status\*\*\]|$)/);
-                    dueDate = dueMatch ? dueMatch[1].trim() : '';
-
-                    // Extract status
-                    const statusMatch = fullLineText.match(/\[\*\*status\*\*\] (.*?)(?=\s+\[\*\*assignee\*\*\]|\s+\[\*\*due\*\*\]|$)/);
-                    status = statusMatch ? statusMatch[1].trim() : '';
-                } else {
-                    // Extract the main action text (without metadata)
-                    const actionLineMatch = block.match(/^- \[\*\*action\*\*\] ([^\n]*)/m);
-                    actionText = actionLineMatch ? actionLineMatch[1].trim() : '';
-
-                    // For cases where the action text continues on next lines before metadata
-                    const blockLines = block.split('\n');
-                    const actionStartIndex = blockLines.findIndex(line => line.match(/^- \[\*\*action\*\*\]/));
-                    const metadataStartIndex = blockLines.findIndex((line, idx) =>
-                        idx > actionStartIndex &&
-                        (line.includes('[**assignee**]') ||
-                            line.includes('[**due**]') ||
-                            line.includes('[**status**]'))
-                    );
-
-                    // If we found metadata on a different line
-                    if (metadataStartIndex !== -1) {
-                        // Collect any action text that appears between the action start and metadata
-                        if (metadataStartIndex > actionStartIndex + 1) {
-                            const continuationLines = blockLines
-                                .slice(actionStartIndex + 1, metadataStartIndex)
-                                .map(line => line.trim())
-                                .filter(line => line && !line.startsWith('[**'))
-                                .join(' ');
-                            if (continuationLines) {
-                                actionText += ' ' + continuationLines;
-                            }
-                        }
-
-                        // Join all remaining lines for metadata extraction
-                        const metadataText = blockLines.slice(metadataStartIndex).join(' ');
-
-                        // Extract metadata from the combined text
-                        const assigneeMatch = metadataText.match(/\[\*\*assignee\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-                        const statusMatch = metadataText.match(/\[\*\*status\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-                        const dueMatch = metadataText.match(/\[\*\*due\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-
-                        assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
-                        status = statusMatch ? statusMatch[1].trim() : '';
-                        dueDate = dueMatch ? dueMatch[1].trim() : '';
-                    } else {
-                        // Fall back to original format with dashes if no metadata line is found
-                        const assigneeMatch = block.match(/\[\*\*assignee\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-                        const statusMatch = block.match(/\[\*\*status\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-                        const dueMatch = block.match(/\[\*\*due\*\*\]\s+(.*?)(?=\s+\[\*\*|\s*$)/);
-
-                        assignee = assigneeMatch ? assigneeMatch[1].trim() : '';
-                        status = statusMatch ? statusMatch[1].trim() : '';
-                        dueDate = dueMatch ? dueMatch[1].trim() : '';
-                    }
+            if (actionTextMatch) {
+                interface ActionItem {
+                    text: string;
+                    assignee: string;
+                    status: string;
+                    dueDate?: string;
                 }
 
-                // Create the action item if we have any text
-                if (actionText) {
-                    interface ActionItem {
-                        text: string;
-                        assignee: string;
-                        status: string;
-                        dueDate?: string;
-                    }
+                const actionItem: ActionItem = {
+                    text: actionTextMatch[1].trim(),
+                    assignee: assigneeMatch ? assigneeMatch[1].trim() : '',
+                    status: statusMatch ? statusMatch[1].trim() : ''
+                };
 
-                    const actionItem: ActionItem = {
-                        text: actionText,
-                        assignee: assignee,
-                        status: status
-                    };
-
-                    if (dueDate) {
-                        actionItem.dueDate = dueDate;
-                    }
-
-                    agendaItem.actionItems.push(actionItem);
+                if (dueMatch) {
+                    actionItem.dueDate = dueMatch[1].trim();
                 }
+
+                agendaItem.actionItems.push(actionItem);
             }
         }
     }
@@ -707,49 +625,20 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
     // Parse decision items
     const decisionItemsMatch = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/);
     if (decisionItemsMatch) {
-        // The previous splitting approach was causing issues with hyphens inside decision text
-        // Instead, let's extract decision blocks more precisely by finding all lines that look like top-level bullet points
+        // Split by top-level bullet points while preserving all content
         const decisionText = decisionItemsMatch[1].trim();
-        const decisionLines = decisionText.split('\n');
+        const decisionBlocks = decisionText.split(/(?=^\s*-\s+(?!\[\*\*))/m);
 
-        let currentDecisionBlock = '';
-        const decisionBlocks: string[] = [];
-
-        // Process line by line to build decision blocks
-        for (let i = 0; i < decisionLines.length; i++) {
-            const line = decisionLines[i];
-
-            // If this line starts a new decision (top-level bullet point)
-            if (line.match(/^\s*-\s+(?!\[\*\*)/)) {
-                // If we were already building a block, save it
-                if (currentDecisionBlock) {
-                    decisionBlocks.push(currentDecisionBlock);
-                }
-                // Start a new block
-                currentDecisionBlock = line;
-            } else {
-                // Add this line to the current block
-                if (currentDecisionBlock) {
-                    currentDecisionBlock += '\n' + line;
-                }
-            }
-        }
-
-        // Add the last block if there is one
-        if (currentDecisionBlock) {
-            decisionBlocks.push(currentDecisionBlock);
-        }
-
-        // Process each decision block
         for (const block of decisionBlocks) {
             if (!block.trim()) continue;
 
-            // Match the decision text (first line after removing the bullet)
-            const decisionMatch = block.match(/^\s*-\s+([^\n]+)/m);
-            // Match metadata lines
-            const effectMatch = block.match(/\s*-\s+\[\*\*effect\*\*\]\s+([^\n]+)/);
-            const rationaleMatch = block.match(/\s*-\s+\[\*\*rationale\*\*\]\s+([^\n]+)/);
-            const opposingMatch = block.match(/\s*-\s+\[\*\*opposing\*\*\]\s+([^\n]+)/);
+            // Extract the main decision text - capture everything until the first metadata tag or end
+            const decisionMatch = block.match(/^\s*-\s+((?:(?!\s*-\s+\[\*\*(?:effect|rationale|opposing)\*\*\])[\s\S])*)/m);
+
+            // Extract metadata using non-greedy matches to avoid capturing too much
+            const effectMatch = block.match(/\s*-\s+\[\*\*effect\*\*\]\s+([\s\S]*?)(?=\s*-\s+\[\*\*|\s*$)/);
+            const rationaleMatch = block.match(/\s*-\s+\[\*\*rationale\*\*\]\s+([\s\S]*?)(?=\s*-\s+\[\*\*|\s*$)/);
+            const opposingMatch = block.match(/\s*-\s+\[\*\*opposing\*\*\]\s+([\s\S]*?)(?=\s*-\s+\[\*\*|\s*$)/);
 
             if (decisionMatch) {
                 const decisionItem = {
