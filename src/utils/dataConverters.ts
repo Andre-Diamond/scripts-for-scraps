@@ -81,19 +81,11 @@ function convertActionItem(item: ServiceActionItem): ActionItem {
  * Convert decision items from service format to app format
  */
 function convertDecisionItem(item: ServiceDecisionItem): DecisionItem {
-    // Default effect value if not valid
-    let effect: "affectsOnlyThisWorkgroup" | "affectsOtherWorkgroups" = "affectsOnlyThisWorkgroup";
-
-    // If item has a valid effect value, use it
-    if (item.effect === "affectsOnlyThisWorkgroup" || item.effect === "affectsOtherWorkgroups") {
-        effect = item.effect;
-    }
-
     return {
         decision: item.decision || '',
         rationale: item.rationale || '',
         opposing: item.opposing || '',
-        effect: effect
+        effect: item.effect === "mayAffectOtherPeople" ? "mayAffectOtherPeople" : "affectsOnlyThisWorkgroup"
     };
 }
 

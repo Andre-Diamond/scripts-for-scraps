@@ -1,4 +1,4 @@
-import { AgendaItem } from './types';
+import { AgendaItem, DecisionItem } from './types';
 
 // Function to detect and repair character-by-character storage issues
 function repairTopicsArray(topics: unknown[]): string[] {
@@ -622,56 +622,65 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
         }
     }
 
-    // Parse Decision Items
+    // Parse Decision Items - FIX HERE
     const decisionSection = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/i);
     if (decisionSection) {
-      const lines = decisionSection[1].split('\n');
-      let i = 0;
-    
-      while (i < lines.length) {
-        // 1) find the next top-level bullet that is NOT metadata
-        if (/^\s*-\s+(?!\[\*\*)/.test(lines[i])) {
-          // 2) collect all lines up until the first metadata tag
-          const rawLines: string[] = [];
-          rawLines.push(lines[i].replace(/^\s*-\s+/, '')); // first line—drop leading "- "
-          i++;
-          while (
-            i < lines.length &&
-            !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
-          ) {
-            rawLines.push(lines[i]);
-            i++;
-          }
-          const decisionText = rawLines.join('\n').trim();
-    
-          // 3) now pull out any metadata tags immediately following
-          let rationale: string|undefined;
-          let opposing:  string|undefined;
-          let effect:    string|undefined;
-    
-          while (i < lines.length && /^\s*-\s+\[\*\*/.test(lines[i])) {
-            const m = lines[i].match(/^\s*-\s+\[\*\*(\w+)\*\*\]\s*(.+)$/);
-            if (m) {
-              const key = m[1].toLowerCase();
-              const val = m[2].trim();
-              if (key === 'rationale')  rationale = val;
-              else if (key === 'opposing') opposing = val;
-              else if (key === 'effect') effect    = val;
+        const lines = decisionSection[1].split('\n');
+        let i = 0;
+
+        while (i < lines.length) {
+            // 1) find the next top-level bullet that is NOT metadata
+            if (/^\s*-\s+(?!\[\*\*)/.test(lines[i])) {
+                // 2) collect all lines up until the first metadata tag
+                const rawLines: string[] = [];
+                rawLines.push(lines[i].replace(/^\s*-\s+/, '')); // first line—drop leading "- "
+                i++;
+                while (
+                    i < lines.length &&
+                    !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
+                ) {
+                    rawLines.push(lines[i]);
+                    i++;
+                }
+                const decisionText = rawLines.join('\n').trim();
+
+                // 3) now pull out any metadata tags immediately following
+                let rationale: string | undefined;
+                let opposing: string | undefined;
+                let effect: string | undefined;
+
+                while (i < lines.length && /^\s*-\s+\[\*\*/.test(lines[i])) {
+                    // Improved regex to correctly capture the entire value for each metadata tag
+                    const m = lines[i].match(/^\s*-\s+\[\*\*(\w+)\*\*\]\s*(.+)$/);
+                    if (m) {
+                        const key = m[1].toLowerCase();
+                        const val = m[2].trim();
+
+                        if (key === 'rationale') rationale = val;
+                        else if (key === 'opposing') opposing = val;
+                        else if (key === 'effect') effect = val;
+
+                        // Print debug info to verify correct extraction
+                        console.log(`Decision metadata - ${key}: ${val}`);
+                    }
+                    i++;
+                }
+
+                // 4) push a clean object—only include fields that exist
+                const item: Partial<DecisionItem> = { decision: decisionText };
+                if (rationale) item.rationale = rationale;
+                if (opposing) item.opposing = opposing;
+                if (effect) item.effect = effect;
+
+                // Print constructed decision item to verify
+                console.log("Final decision item:", JSON.stringify(item));
+
+                agendaItem.decisionItems.push(item as DecisionItem);
+
+            } else {
+                i++;
             }
-            i++;
-          }
-    
-          // 4) push a clean object—only include fields that exist
-          const item: any = { decision: decisionText };
-          if (rationale) item.rationale = rationale;
-          if (opposing)  item.opposing  = opposing;
-          if (effect)    item.effect    = effect;
-          agendaItem.decisionItems.push(item);
-    
-        } else {
-          i++;
         }
-      }
     }
 
     // Parse Town Hall Updates

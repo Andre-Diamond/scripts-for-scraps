@@ -20,7 +20,7 @@ export type DecisionItem = {
     decision: string;
     rationale: string;
     opposing: string;
-    effect: "affectsOnlyThisWorkgroup" | "affectsOtherWorkgroups";
+    effect: "affectsOnlyThisWorkgroup" | "mayAffectOtherPeople";
 };
 
 export type AgendaItem = {
