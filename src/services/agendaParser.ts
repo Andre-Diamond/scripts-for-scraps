@@ -631,17 +631,18 @@ if (decisionSection) {
   while (i < lines.length) {
     const line = lines[i];
 
-    // 1) Detect a new top-level decision (no leading spaces, not metadata)
+    // 1) Detect a new top-level decision (no indent, not metadata)
     if (/^-\s+(?!\[\*\*)/.test(line)) {
-      // a) Gather all free-text lines for this decision
+      // a) Gather ALL lines up to the first metadata tag
       const freeTextLines: string[] = [];
+      // include this bullet
       freeTextLines.push(line.replace(/^-+\s*/, ''));
       i++;
 
+      // continue until we see a metadata tag (rationale|opposing|effect)
       while (
         i < lines.length &&
-        !/^- /.test(lines[i]) &&                          // not a new top-level bullet
-        !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i]) // not metadata
+        !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
       ) {
         freeTextLines.push(lines[i].trim());
         i++;
@@ -649,15 +650,15 @@ if (decisionSection) {
 
       const decisionText = freeTextLines.join(' ').trim();
 
-      // b) Now pull out metadata tags, skipping over any blank lines
+      // b) Pull out metadata tags, skipping any blank lines
       let rationale: string|undefined;
-      let opposing: string|undefined;
-      let effect: string|undefined;
+      let opposing:  string|undefined;
+      let effect:    string|undefined;
 
       while (i < lines.length) {
         const trimmed = lines[i].trim();
 
-        // If this line is exactly a metadata tag…
+        // metadata line?
         const m = trimmed.match(/^- \[\*\*(\w+)\*\*\]\s*([\s\S]+)/);
         if (m) {
           const key = m[1].toLowerCase();
@@ -669,25 +670,25 @@ if (decisionSection) {
           continue;
         }
 
-        // Skip blank lines between tags
+        // skip blank lines between tags
         if (trimmed === '') {
           i++;
           continue;
         }
 
-        // Anything else means we’re done with this decision’s metadata
+        // otherwise, metadata block is done
         break;
       }
 
       // c) Push the assembled DecisionItem
       const item: DecisionItem = { decision: decisionText };
-      if (rationale)  item.rationale  = rationale;
-      if (opposing)   item.opposing   = opposing;
-      if (effect)     item.effect     = effect;
+      if (rationale) item.rationale = rationale;
+      if (opposing)  item.opposing  = opposing;
+      if (effect)    item.effect    = effect;
       agendaItem.decisionItems.push(item);
     }
     else {
-      // not a decision-starter, skip
+      // not the start of a decision → skip
       i++;
     }
   }
