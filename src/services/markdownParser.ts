@@ -298,50 +298,39 @@ function parseSingleWorkgroup(
     }
 
     // Extract participants, facilitator and documenter
+    // ─── Extract participants, facilitators, documenters, translators ───
     const presentMatch = section.match(/- \*\*Present:\*\* ([^\n]+)/);
     if (presentMatch) {
-        const presentText = presentMatch[1];
-        let peoplePresent = presentText;
+        let peopleText = presentMatch[1];
 
-        // Extract facilitator
-        const facilitatorMatch = presentText.match(/([^,]+?) \[\*\*facilitator\*\*\]/);
-        if (facilitatorMatch) {
-            parsedData.meetingInfo.host = facilitatorMatch[1].trim();
-            peoplePresent = peoplePresent.replace(/\[\*\*facilitator\*\*\]/, '');
-        }
-
-        // Extract documenter
-        const documenterMatch = presentText.match(/([^,\[]+) \[\*\*documenter\*\*\]/);
-        if (documenterMatch) {
-            parsedData.meetingInfo.documenter = documenterMatch[1].trim();
-            peoplePresent = peoplePresent.replace(/\[\*\*documenter\*\*\]/, '');
-        }
-
-        // Extract translator if present
-        const translatorMatch = presentText.match(/([^,\[]+) \[\*\*translator\*\*\]/);
-        if (translatorMatch) {
-            parsedData.meetingInfo.translator = translatorMatch[1].trim();
-            peoplePresent = peoplePresent.replace(/\[\*\*translator\*\*\]/, '');
-        }
-
-        // Clean up and store all participants
-        // Remove duplicates but preserve original casing
-        const uniquePeopleMap = new Map<string, string>(); // Maps lowercase -> original casing
-        peoplePresent
-            .split(',')
-            .map((p: string) => p.trim())
-            .filter((p: string) => p)
-            .forEach((p: string) => {
-                // Use lowercase as key for deduplication, but keep original casing as value
-                uniquePeopleMap.set(p.toLowerCase(), p);
+        function extractRoles(role: 'facilitator' | 'documenter' | 'translator') {
+            const re = new RegExp(`([^\[]+?)\\s*\\[\\*\\*${role}\\*\\*\\]`, 'gi');
+            const names = [...peopleText.matchAll(re)].map(m => {
+                let name = m[1].trim();
+                name = name.replace(/^,*/, '').replace(/,*$/, '').trim();
+                return name;
             });
+            peopleText = peopleText.replace(re, '');
+            return names;
+        }
 
-        // Get the values in an array and sort them alphabetically (case-insensitive)
-        const sortedPeople = Array.from(uniquePeopleMap.values())
-            .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        const hosts       = extractRoles('facilitator');
+        const documenters = extractRoles('documenter');
+        const translators = extractRoles('translator');
 
-        // Join the original-cased values
-        parsedData.meetingInfo.peoplePresent = sortedPeople.join(', ');
+        const unique = new Map<string,string>();
+        peopleText
+            .split(',')
+            .map(p => p.trim())
+            .filter(Boolean)
+            .forEach(p => unique.set(p.toLowerCase(), p));
+
+        parsedData.meetingInfo.host       = hosts.join(', ');
+        parsedData.meetingInfo.documenter = documenters.join(', ');
+        parsedData.meetingInfo.translator = translators.join(', ');
+        parsedData.meetingInfo.peoplePresent = Array.from(unique.values())
+            .sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()))
+            .join(', ');
     }
 
     // Extract purpose
