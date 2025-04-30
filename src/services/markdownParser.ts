@@ -297,39 +297,45 @@ function parseSingleWorkgroup(
         }
     }
 
-    // Extract participants, facilitator and documenter
     // ─── Extract participants, facilitators, documenters, translators ───
     const presentMatch = section.match(/- \*\*Present:\*\* ([^\n]+)/);
     if (presentMatch) {
         let peopleText = presentMatch[1];
 
-        function extractRoles(role: 'facilitator' | 'documenter' | 'translator') {
-            const re = new RegExp(`([^\[]+?)\\s*\\[\\*\\*${role}\\*\\*\\]`, 'gi');
-            const names = [...peopleText.matchAll(re)].map(m => {
-                let name = m[1].trim();
-                name = name.replace(/^,*/, '').replace(/,*$/, '').trim();
-                return name;
-            });
-            peopleText = peopleText.replace(re, '');
-            return names;
+        // Extract facilitators (hosts)
+        const facilTag = '[**facilitator**]';
+        if (peopleText.includes(facilTag)) {
+            const idx = peopleText.indexOf(facilTag);
+            const hosts = peopleText.slice(0, idx).trim().replace(/,$/, '');
+            parsedData.meetingInfo.host = hosts;
+            // remove processed part
+            peopleText = peopleText.slice(idx + facilTag.length).replace(/^,*/, '');
         }
 
-        const hosts       = extractRoles('facilitator');
-        const documenters = extractRoles('documenter');
-        const translators = extractRoles('translator');
+        // Extract documenters
+        const docTag = '[**documenter**]';
+        if (peopleText.includes(docTag)) {
+            const idx2 = peopleText.indexOf(docTag);
+            const docs = peopleText.slice(0, idx2).trim().replace(/,$/, '');
+            parsedData.meetingInfo.documenter = docs;
+            peopleText = peopleText.slice(idx2 + docTag.length).replace(/^,*/, '');
+        }
 
+        // Extract translators
+        const transTag = '[**translator**]';
+        if (peopleText.includes(transTag)) {
+            const idx3 = peopleText.indexOf(transTag);
+            const trans = peopleText.slice(0, idx3).trim().replace(/,$/, '');
+            parsedData.meetingInfo.translator = trans;
+            peopleText = peopleText.slice(idx3 + transTag.length).replace(/^,*/, '');
+        }
+
+        // What remains are attendees without role tags
+        const remaining = peopleText.split(',').map(p => p.trim()).filter(Boolean);
         const unique = new Map<string,string>();
-        peopleText
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean)
-            .forEach(p => unique.set(p.toLowerCase(), p));
-
-        parsedData.meetingInfo.host       = hosts.join(', ');
-        parsedData.meetingInfo.documenter = documenters.join(', ');
-        parsedData.meetingInfo.translator = translators.join(', ');
+        remaining.forEach(p => unique.set(p.toLowerCase(), p));
         parsedData.meetingInfo.peoplePresent = Array.from(unique.values())
-            .sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()))
+            .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
             .join(', ');
     }
 
