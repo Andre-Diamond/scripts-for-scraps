@@ -624,64 +624,74 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
 
     // Parse Decision Items - FIX HERE
     const decisionSection = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/i);
-    if (decisionSection) {
-        const lines = decisionSection[1].split('\n');
-        let i = 0;
+if (decisionSection) {
+  const lines = decisionSection[1].split('\n');
+  let i = 0;
 
-        while (i < lines.length) {
-            // 1) find the next top-level bullet that is NOT metadata
-            if (/^\s*-\s+(?!\[\*\*)/.test(lines[i])) {
-                // 2) collect all lines up until the first metadata tag
-                const rawLines: string[] = [];
-                rawLines.push(lines[i].replace(/^\s*-\s+/, '')); // first line—drop leading "- "
-                i++;
-                while (
-                    i < lines.length &&
-                    !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
-                ) {
-                    rawLines.push(lines[i]);
-                    i++;
-                }
-                const decisionText = rawLines.join('\n').trim();
+  while (i < lines.length) {
+    const line = lines[i];
 
-                // 3) now pull out any metadata tags immediately following
-                let rationale: string | undefined;
-                let opposing: string | undefined;
-                let effect: string | undefined;
+    // 1) Detect a new top-level decision (no leading spaces, not metadata)
+    if (/^-\s+(?!\[\*\*)/.test(line)) {
+      // a) Gather all free-text lines for this decision
+      const freeTextLines: string[] = [];
+      freeTextLines.push(line.replace(/^-+\s*/, ''));
+      i++;
 
-                while (i < lines.length && /^\s*-\s+\[\*\*/.test(lines[i])) {
-                    // Improved regex to correctly capture the entire value for each metadata tag
-                    const m = lines[i].match(/^\s*-\s+\[\*\*(\w+)\*\*\]\s*(.+)$/);
-                    if (m) {
-                        const key = m[1].toLowerCase();
-                        const val = m[2].trim();
+      while (
+        i < lines.length &&
+        !/^- /.test(lines[i]) &&                          // not a new top-level bullet
+        !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i]) // not metadata
+      ) {
+        freeTextLines.push(lines[i].trim());
+        i++;
+      }
 
-                        if (key === 'rationale') rationale = val;
-                        else if (key === 'opposing') opposing = val;
-                        else if (key === 'effect') effect = val;
+      const decisionText = freeTextLines.join(' ').trim();
 
-                        // Print debug info to verify correct extraction
-                        console.log(`Decision metadata - ${key}: ${val}`);
-                    }
-                    i++;
-                }
+      // b) Now pull out metadata tags, skipping over any blank lines
+      let rationale: string|undefined;
+      let opposing: string|undefined;
+      let effect: string|undefined;
 
-                // 4) push a clean object—only include fields that exist
-                const item: Partial<DecisionItem> = { decision: decisionText };
-                if (rationale) item.rationale = rationale;
-                if (opposing) item.opposing = opposing;
-                if (effect) item.effect = effect;
+      while (i < lines.length) {
+        const trimmed = lines[i].trim();
 
-                // Print constructed decision item to verify
-                console.log("Final decision item:", JSON.stringify(item));
-
-                agendaItem.decisionItems.push(item as DecisionItem);
-
-            } else {
-                i++;
-            }
+        // If this line is exactly a metadata tag…
+        const m = trimmed.match(/^- \[\*\*(\w+)\*\*\]\s*([\s\S]+)/);
+        if (m) {
+          const key = m[1].toLowerCase();
+          const val = m[2].trim();
+          if (key === 'rationale')  rationale  = val;
+          else if (key === 'opposing') opposing = val;
+          else if (key === 'effect')    effect    = val;
+          i++;
+          continue;
         }
+
+        // Skip blank lines between tags
+        if (trimmed === '') {
+          i++;
+          continue;
+        }
+
+        // Anything else means we’re done with this decision’s metadata
+        break;
+      }
+
+      // c) Push the assembled DecisionItem
+      const item: DecisionItem = { decision: decisionText };
+      if (rationale)  item.rationale  = rationale;
+      if (opposing)   item.opposing   = opposing;
+      if (effect)     item.effect     = effect;
+      agendaItem.decisionItems.push(item);
     }
+    else {
+      // not a decision-starter, skip
+      i++;
+    }
+  }
+}
 
     // Parse Town Hall Updates
     const townHallUpdatesMatch = content.match(/#### Town Hall Updates:([\s\S]*?)(?=\n#### |$)/);
