@@ -624,75 +624,77 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
 
     // Parse Decision Items - FIX HERE
     const decisionSection = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/i);
-if (decisionSection) {
-  const lines = decisionSection[1].split('\n');
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    // 1) Detect a new top-level decision (no indent, not metadata)
-    if (/^-\s+(?!\[\*\*)/.test(line)) {
-      // a) Gather ALL lines up to the first metadata tag
-      const freeTextLines: string[] = [];
-      // include this bullet
-      freeTextLines.push(line.replace(/^-+\s*/, ''));
-      i++;
-
-      // continue until we see a metadata tag (rationale|opposing|effect)
-      while (
-        i < lines.length &&
-        !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
-      ) {
-        freeTextLines.push(lines[i].trim());
-        i++;
-      }
-
-      const decisionText = freeTextLines.join(' ').trim();
-
-      // b) Pull out metadata tags, skipping any blank lines
-      let rationale: string|undefined;
-      let opposing:  string|undefined;
-      let effect:    string|undefined;
-
+    if (decisionSection) {
+      const lines = decisionSection[1].split('\n');
+      let i = 0;
+    
       while (i < lines.length) {
-        const trimmed = lines[i].trim();
-
-        // metadata line?
-        const m = trimmed.match(/^- \[\*\*(\w+)\*\*\]\s*([\s\S]+)/);
-        if (m) {
-          const key = m[1].toLowerCase();
-          const val = m[2].trim();
-          if (key === 'rationale')  rationale  = val;
-          else if (key === 'opposing') opposing = val;
-          else if (key === 'effect')    effect    = val;
+        const line = lines[i];
+    
+        // 1) Top-level decision start? (no indent, not a metadata tag)
+        if (/^-\s+(?!\[\*\*)/.test(line)) {
+          // a) Collect all free-text lines until the first metadata tag
+          const freeTextLines: string[] = [];
+          freeTextLines.push(line.replace(/^-+\s*/, ''));
           i++;
-          continue;
+          while (
+            i < lines.length &&
+            !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
+          ) {
+            freeTextLines.push(lines[i].trim());
+            i++;
+          }
+          const decisionText = freeTextLines.join(' ').trim();
+    
+          // b) Now collect each metadata block (rationale, opposing, effect)
+          let rationale: string|undefined;
+          let opposing:  string|undefined;
+          let effect:    string|undefined;
+    
+          while (i < lines.length) {
+            // Peek at the next metadata tag
+            const metaMatch = lines[i].match(/^\s*-\s+\[\*\*(\w+)\*\*\]\s*(.*)$/);
+            if (!metaMatch) break;  // no more tags
+    
+            const key = metaMatch[1].toLowerCase();
+            // Start with the on-eline text after the tag
+            const valLines = [ metaMatch[2].trim() ];
+            i++;
+    
+            // Now gather **any** following lines that are:
+            //   • not a new top-level bullet   (`- something`)
+            //   • not another metadata tag      (`  - [**…**]…`)
+            //   • (including blanks → preserves paragraphs)
+            while (
+              i < lines.length &&
+              !/^- /.test(lines[i]) &&
+              !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
+            ) {
+              valLines.push(lines[i]);
+              i++;
+            }
+    
+            // Join with spaces so paragraphs stay separate if you want:
+            const fullVal = valLines.join('\n').trim();
+    
+            if (key === 'rationale')  rationale  = fullVal;
+            else if (key === 'opposing') opposing = fullVal;
+            else if (key === 'effect')    effect    = fullVal;
+          }
+    
+          // c) Push the assembled DecisionItem
+          const item: DecisionItem = { decision: decisionText };
+          if (rationale) item.rationale = rationale;
+          if (opposing)  item.opposing  = opposing;
+          if (effect)    item.effect    = effect;
+          agendaItem.decisionItems.push(item);
         }
-
-        // skip blank lines between tags
-        if (trimmed === '') {
+        else {
+          // skip non-decision lines
           i++;
-          continue;
         }
-
-        // otherwise, metadata block is done
-        break;
       }
-
-      // c) Push the assembled DecisionItem
-      const item: DecisionItem = { decision: decisionText };
-      if (rationale) item.rationale = rationale;
-      if (opposing)  item.opposing  = opposing;
-      if (effect)    item.effect    = effect;
-      agendaItem.decisionItems.push(item);
     }
-    else {
-      // not the start of a decision → skip
-      i++;
-    }
-  }
-}
 
     // Parse Town Hall Updates
     const townHallUpdatesMatch = content.match(/#### Town Hall Updates:([\s\S]*?)(?=\n#### |$)/);
