@@ -541,45 +541,32 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
     }
 
     // Parse discussion points
-    const discussionPointsMatch = content.match(/#### (?:Discussion Points|In this meeting we discussed):([\s\S]*?)(?=\n#### |$)/);
-    if (discussionPointsMatch) {
-        const discussionText = discussionPointsMatch[1].trim();
-        const discussionLines = discussionText.split('\n');
-
-        const points: string[] = [];
-        let currentPoint = '';
-
-        for (const line of discussionLines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.startsWith('- ')) {
-                // If we were building a previous point, save it
-                if (currentPoint) {
-                    points.push(currentPoint);
-                }
-                // Start new point
-                currentPoint = trimmedLine.substring(2);
-            } else if (trimmedLine && currentPoint) {
-                // Continue previous point
-                currentPoint += ' ' + trimmedLine;
-            }
+    const discussionSection =
+      content.match(/####\s+Discussion Points:([\s\S]*?)(?=\n####|$)/i)?.[1]
+      // if none, fall back to "In this meeting we discussed"
+      || content.match(/####\s+In this meeting we discussed:([\s\S]*?)(?=\n####|$)/i)?.[1];
+    
+    if (discussionSection) {
+      const discussionLines = discussionSection.trim().split('\n');
+      const points: string[] = [];
+      let current = '';
+    
+      for (const line of discussionLines) {
+        const t = line.trim();
+        if (t.startsWith('- ')) {
+          if (current) points.push(current);
+          current = t.slice(2);
+        } else if (t && current) {
+          current += ' ' + t;
         }
-
-        // Add the last point if there is one
-        if (currentPoint) {
-            points.push(currentPoint);
-        }
-
-        agendaItem.discussionPoints = points.map(point => {
-            // Normalize discussion points text
-            let text = point.trim();
-
-            // Ensure complete sentences by adding periods if missing
-            if (text && !text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?')) {
-                text += '.';
-            }
-
-            return text;
-        });
+      }
+      if (current) points.push(current);
+    
+      agendaItem.discussionPoints = points.map(pt => {
+        pt = pt.trim();
+        if (pt && !/[.!?]$/.test(pt)) pt += '.';
+        return pt;
+      });
     }
 
     // Parse action items

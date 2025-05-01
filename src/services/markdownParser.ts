@@ -415,7 +415,7 @@ function parseSingleWorkgroup(
     }
 
     // Extract agenda items - specifically looking for #### Agenda item pattern
-    const agendaPattern = /#### Agenda item (\d+) - ([^-\n]+) - \[([^\]]+)\]([\s\S]*?)(?=\n#### Agenda item|\n### |$)/g;
+    const agendaPattern = /#### Agenda item\s+(\d+)\s*-\s*(.*?)\s*-\s*\[([^\]]+)\]([\s\S]*?)(?=\n#### Agenda item|\n### |$)/g;
     const agendaMatches = [...section.matchAll(agendaPattern)];
 
     // If we found explicit agenda items, process them
