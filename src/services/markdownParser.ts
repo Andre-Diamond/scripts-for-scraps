@@ -548,7 +548,13 @@ function parseSingleWorkgroup(
 
         const otherMatch = tagsSection[1].match(/- (?:\*\*)?other:(?:\*\*)?\s*([^\n]+)/i);
         if (otherMatch) {
-            parsedData.tags.other = otherMatch[1].trim();
+            // Only capture content up to the next date heading or end of section
+            const otherContent = otherMatch[1].trim();
+            // Remove any date heading pattern that might have been captured
+            const cleanedContent = otherContent.replace(/^##\s+.*$/, '').trim();
+            if (cleanedContent) {
+                parsedData.tags.other = cleanedContent;
+            }
         }
 
         const gamesPlayedMatch = tagsSection[1].match(/- (?:\*\*)?games played:(?:\*\*)?\s*([^\n]+)/i);
