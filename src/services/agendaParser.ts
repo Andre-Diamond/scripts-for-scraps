@@ -542,49 +542,49 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
 
     // Parse discussion points
     const discussionSection =
-      content.match(/####\s+Discussion Points:([\s\S]*?)(?=\n####|$)/i)?.[1]
-      // if none, fall back to "In this meeting we discussed"
-      || content.match(/####\s+In this meeting we discussed:([\s\S]*?)(?=\n####|$)/i)?.[1];
-    
+        content.match(/####\s+Discussion Points:([\s\S]*?)(?=\n####|$)/i)?.[1]
+        // if none, fall back to "In this meeting we discussed"
+        || content.match(/####\s+In this meeting we discussed:([\s\S]*?)(?=\n####|$)/i)?.[1];
+
     if (discussionSection) {
-      const discussionLines = discussionSection.trim().split('\n');
-      const points: string[] = [];
-      let current = '';
-    
-      for (const line of discussionLines) {
-        const t = line.trim();
-        if (t.startsWith('- ')) {
-          if (current) points.push(current);
-          current = t.slice(2);
-        } else if (t && current) {
-          current += ' ' + t;
+        const discussionLines = discussionSection.trim().split('\n');
+        const points: string[] = [];
+        let current = '';
+
+        for (const line of discussionLines) {
+            const t = line.trim();
+            if (t.startsWith('- ')) {
+                if (current) points.push(current);
+                current = t.slice(2);
+            } else if (t && current) {
+                current += ' ' + t;
+            }
         }
-      }
-      if (current) points.push(current);
-    
-      agendaItem.discussionPoints = points.map(pt => {
-        pt = pt.trim();
-        if (pt && !/[.!?]$/.test(pt)) pt += '.';
-        return pt;
-      });
+        if (current) points.push(current);
+
+        agendaItem.discussionPoints = points.map(pt => {
+            pt = pt.trim();
+            if (pt && !/[.!?]$/.test(pt)) pt += '.';
+            return pt;
+        });
     }
 
     // Parse action items
     const actionItemsMatch = content.match(/#### Action Items:([\s\S]*?)(?=\n#### |$)/);
     if (actionItemsMatch) {
-        // First, split by action items (lines that start with "- [**action**]")
-        const actionBlocks = actionItemsMatch[1].split(/(?=\n?- \[\*\*action\*\*\])/);
+        // First, split by action items (lines that start with "- [action]" or "- [**action**]")
+        const actionBlocks = actionItemsMatch[1].split(/(?=\n?- \[(?:action|\*\*action\*\*)\])/);
 
         for (const block of actionBlocks) {
             if (!block.trim()) continue;
 
-            // Extract the full action text - everything between [**action**] and the next metadata tag
-            const actionTextMatch = block.match(/^- \[\*\*action\*\*\]\s+((?:(?!\s*\[\*\*(?:assignee|due|status)\*\*\])[\s\S])*)/);
+            // Extract the full action text - everything between [action] or [**action**] and the next metadata tag
+            const actionTextMatch = block.match(/^- \[(?:action|\*\*action\*\*)\]\s+((?:(?!\s*\[(?:assignee|due|status|\*\*assignee\*\*|\*\*due\*\*|\*\*status\*\*)\])[\s\S])*)/);
 
-            // Extract metadata using non-greedy matches
-            const assigneeMatch = block.match(/\[\*\*assignee\*\*\]\s+([\s\S]*?)(?=\s*\[\*\*|\s*$)/);
-            const statusMatch = block.match(/\[\*\*status\*\*\]\s+([\s\S]*?)(?=\s*\[\*\*|\s*$)/);
-            const dueMatch = block.match(/\[\*\*due\*\*\]\s+([\s\S]*?)(?=\s*\[\*\*|\s*$)/);
+            // Extract metadata using non-greedy matches - handle both bold and non-bold versions
+            const assigneeMatch = block.match(/\[(?:assignee|\*\*assignee\*\*)\]\s+([\s\S]*?)(?=\s*\[(?:assignee|due|status|\*\*assignee\*\*|\*\*due\*\*|\*\*status\*\*)|\s*$)/);
+            const statusMatch = block.match(/\[(?:status|\*\*status\*\*)\]\s+([\s\S]*?)(?=\s*\[(?:assignee|due|status|\*\*assignee\*\*|\*\*due\*\*|\*\*status\*\*)|\s*$)/);
+            const dueMatch = block.match(/\[(?:due|\*\*due\*\*)\]\s+([\s\S]*?)(?=\s*\[(?:assignee|due|status|\*\*assignee\*\*|\*\*due\*\*|\*\*status\*\*)|\s*$)/);
 
             if (actionTextMatch) {
                 interface ActionItem {
@@ -609,78 +609,80 @@ export function parseAgendaContent(content: string, agendaItem: AgendaItem): voi
         }
     }
 
-    // Parse Decision Items - FIX HERE
+    // Parse Decision Items
     const decisionSection = content.match(/#### Decision Items:([\s\S]*?)(?=\n#### |$)/i);
     if (decisionSection) {
-      const lines = decisionSection[1].split('\n');
-      let i = 0;
-    
-      while (i < lines.length) {
-        const line = lines[i];
-    
-        // 1) Top-level decision start? (no indent, not a metadata tag)
-        if (/^-\s+(?!\[\*\*)/.test(line)) {
-          // a) Collect all free-text lines until the first metadata tag
-          const freeTextLines: string[] = [];
-          freeTextLines.push(line.replace(/^-+\s*/, ''));
-          i++;
-          while (
-            i < lines.length &&
-            !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
-          ) {
-            freeTextLines.push(lines[i].trim());
-            i++;
-          }
-          const decisionText = freeTextLines.join(' ').trim();
-    
-          // b) Now collect each metadata block (rationale, opposing, effect)
-          let rationale: string|undefined;
-          let opposing:  string|undefined;
-          let effect:    string|undefined;
-    
-          while (i < lines.length) {
-            // Peek at the next metadata tag
-            const metaMatch = lines[i].match(/^\s*-\s+\[\*\*(\w+)\*\*\]\s*(.*)$/);
-            if (!metaMatch) break;  // no more tags
-    
-            const key = metaMatch[1].toLowerCase();
-            // Start with the on-eline text after the tag
-            const valLines = [ metaMatch[2].trim() ];
-            i++;
-    
-            // Now gather **any** following lines that are:
-            //   • not a new top-level bullet   (`- something`)
-            //   • not another metadata tag      (`  - [**…**]…`)
-            //   • (including blanks → preserves paragraphs)
-            while (
-              i < lines.length &&
-              !/^- /.test(lines[i]) &&
-              !/^\s*-\s+\[\*\*(?:rationale|opposing|effect)\*\*\]/.test(lines[i])
-            ) {
-              valLines.push(lines[i]);
-              i++;
+        const lines = decisionSection[1].split('\n');
+        let i = 0;
+
+        while (i < lines.length) {
+            const line = lines[i];
+
+            // 1) Top-level decision start? (no indent, not a metadata tag)
+            if (/^-\s+(?!\[(?:rationale|opposing|effect|\*\*rationale\*\*|\*\*opposing\*\*|\*\*effect\*\*)\])/.test(line)) {
+                // a) Collect all free-text lines until the first metadata tag
+                const freeTextLines: string[] = [];
+                freeTextLines.push(line.replace(/^-+\s*/, ''));
+                i++;
+                while (
+                    i < lines.length &&
+                    !/^\s*-\s+\[(?:rationale|opposing|effect|\*\*rationale\*\*|\*\*opposing\*\*|\*\*effect\*\*)\]/.test(lines[i])
+                ) {
+                    freeTextLines.push(lines[i].trim());
+                    i++;
+                }
+                const decisionText = freeTextLines.join(' ').trim();
+
+                // b) Now collect each metadata block (rationale, opposing, effect)
+                let rationale: string | undefined;
+                let opposing: string | undefined;
+                let effect: string | undefined;
+
+                while (i < lines.length) {
+                    // Peek at the next metadata tag - handle both bold and non-bold versions
+                    const metaMatch = lines[i].match(/^\s*-\s+\[(?:(\w+)|\*\*(\w+)\*\*)\]\s*(.*)$/);
+                    if (!metaMatch) break;  // no more tags
+
+                    const key = (metaMatch[1] || metaMatch[2]).toLowerCase();
+                    // Start with the one-line text after the tag
+                    const valLines = [metaMatch[3].trim()];
+                    i++;
+
+                    // Now gather **any** following lines that are:
+                    //   • not a new top-level bullet   (`- something`)
+                    //   • not another metadata tag      (`  - [rationale]…` or `  - [**rationale**]…`)
+                    //   • (including blanks → preserves paragraphs)
+                    while (
+                        i < lines.length &&
+                        !/^- /.test(lines[i]) &&
+                        !/^\s*-\s+\[(?:rationale|opposing|effect|\*\*rationale\*\*|\*\*opposing\*\*|\*\*effect\*\*)\]/.test(lines[i])
+                    ) {
+                        valLines.push(lines[i]);
+                        i++;
+                    }
+
+                    // Join with spaces so paragraphs stay separate if you want:
+                    const fullVal = valLines.join('\n').trim();
+
+                    if (key === 'rationale') rationale = fullVal;
+                    else if (key === 'opposing') opposing = fullVal;
+                    else if (key === 'effect') effect = fullVal;
+                }
+
+                // c) Push the assembled DecisionItem
+                const item: DecisionItem = {
+                    decision: decisionText,
+                    rationale: rationale || '',
+                    opposing: opposing || '',
+                    effect: effect === "mayAffectOtherPeople" ? "mayAffectOtherPeople" : "affectsOnlyThisWorkgroup"
+                };
+                agendaItem.decisionItems.push(item);
             }
-    
-            // Join with spaces so paragraphs stay separate if you want:
-            const fullVal = valLines.join('\n').trim();
-    
-            if (key === 'rationale')  rationale  = fullVal;
-            else if (key === 'opposing') opposing = fullVal;
-            else if (key === 'effect')    effect    = fullVal;
-          }
-    
-          // c) Push the assembled DecisionItem
-          const item: DecisionItem = { decision: decisionText };
-          if (rationale) item.rationale = rationale;
-          if (opposing)  item.opposing  = opposing;
-          if (effect)    item.effect    = effect;
-          agendaItem.decisionItems.push(item);
+            else {
+                // skip non-decision lines
+                i++;
+            }
         }
-        else {
-          // skip non-decision lines
-          i++;
-        }
-      }
     }
 
     // Parse Town Hall Updates

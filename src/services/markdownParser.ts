@@ -267,14 +267,14 @@ function parseSingleWorkgroup(
     }
 
     // Extract meeting info
-    const typeMatch = section.match(/- \*\*Type of meeting:\*\* ([^\n]+)/);
+    const typeMatch = section.match(/- (?:\*\*)?Type of meeting:(?:\*\*)?\s*([^\n]+)/);
     if (typeMatch) {
         parsedData.meetingInfo.name = typeMatch[1].trim();
     }
 
     // The date is already set from the closest date heading, 
     // but we'll also check for an inline date in case it exists
-    const inlineDateMatch = section.match(/- \*\*Date:\*\* ([^\n]+)/);
+    const inlineDateMatch = section.match(/- (?:\*\*)?Date:(?:\*\*)?\s*([^\n]+)/);
     if (inlineDateMatch) {
         // If there's an inline date, it should override the date from the heading
         parsedData.meetingInfo.date = inlineDateMatch[1].trim();
@@ -298,41 +298,47 @@ function parseSingleWorkgroup(
     }
 
     // ─── Extract participants, facilitators, documenters, translators ───
-    const presentMatch = section.match(/- \*\*Present:\*\* ([^\n]+)/);
+    const presentMatch = section.match(/- (?:\*\*)?Present:(?:\*\*)?\s*([^\n]+)/);
     if (presentMatch) {
         let peopleText = presentMatch[1];
 
         // Extract facilitators (hosts)
-        const facilTag = '[**facilitator**]';
-        if (peopleText.includes(facilTag)) {
-            const idx = peopleText.indexOf(facilTag);
+        const facilTag = '[facilitator]';
+        const facilTagBold = '[**facilitator**]';
+        if (peopleText.includes(facilTag) || peopleText.includes(facilTagBold)) {
+            const idx = peopleText.includes(facilTag) ? peopleText.indexOf(facilTag) : peopleText.indexOf(facilTagBold);
             const hosts = peopleText.slice(0, idx).trim().replace(/,$/, '');
             parsedData.meetingInfo.host = hosts;
             // remove processed part
-            peopleText = peopleText.slice(idx + facilTag.length).replace(/^,*/, '');
+            const tagLength = peopleText.includes(facilTag) ? facilTag.length : facilTagBold.length;
+            peopleText = peopleText.slice(idx + tagLength).replace(/^,*/, '');
         }
 
         // Extract documenters
-        const docTag = '[**documenter**]';
-        if (peopleText.includes(docTag)) {
-            const idx2 = peopleText.indexOf(docTag);
+        const docTag = '[documenter]';
+        const docTagBold = '[**documenter**]';
+        if (peopleText.includes(docTag) || peopleText.includes(docTagBold)) {
+            const idx2 = peopleText.includes(docTag) ? peopleText.indexOf(docTag) : peopleText.indexOf(docTagBold);
             const docs = peopleText.slice(0, idx2).trim().replace(/,$/, '');
             parsedData.meetingInfo.documenter = docs;
-            peopleText = peopleText.slice(idx2 + docTag.length).replace(/^,*/, '');
+            const tagLength = peopleText.includes(docTag) ? docTag.length : docTagBold.length;
+            peopleText = peopleText.slice(idx2 + tagLength).replace(/^,*/, '');
         }
 
         // Extract translators
-        const transTag = '[**translator**]';
-        if (peopleText.includes(transTag)) {
-            const idx3 = peopleText.indexOf(transTag);
+        const transTag = '[translator]';
+        const transTagBold = '[**translator**]';
+        if (peopleText.includes(transTag) || peopleText.includes(transTagBold)) {
+            const idx3 = peopleText.includes(transTag) ? peopleText.indexOf(transTag) : peopleText.indexOf(transTagBold);
             const trans = peopleText.slice(0, idx3).trim().replace(/,$/, '');
             parsedData.meetingInfo.translator = trans;
-            peopleText = peopleText.slice(idx3 + transTag.length).replace(/^,*/, '');
+            const tagLength = peopleText.includes(transTag) ? transTag.length : transTagBold.length;
+            peopleText = peopleText.slice(idx3 + tagLength).replace(/^,*/, '');
         }
 
         // What remains are attendees without role tags
         const remaining = peopleText.split(',').map(p => p.trim()).filter(Boolean);
-        const unique = new Map<string,string>();
+        const unique = new Map<string, string>();
         remaining.forEach(p => unique.set(p.toLowerCase(), p));
         parsedData.meetingInfo.peoplePresent = Array.from(unique.values())
             .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
@@ -340,43 +346,43 @@ function parseSingleWorkgroup(
     }
 
     // Extract purpose
-    const purposeMatch = section.match(/- \*\*Purpose:\*\* ([^\n]+)/);
+    const purposeMatch = section.match(/- (?:\*\*)?Purpose:(?:\*\*)?\s*([^\n]+)/);
     if (purposeMatch) {
         parsedData.meetingInfo.purpose = purposeMatch[1].trim();
     }
 
     // Extract Town Hall Number
-    const townHallMatch = section.match(/- \*\*Town Hall Number:\*\* ([^\n]+)/);
+    const townHallMatch = section.match(/- (?:\*\*)?Town Hall Number:(?:\*\*)?\s*([^\n]+)/);
     if (townHallMatch) {
         parsedData.meetingInfo.townHallNumber = townHallMatch[1].trim();
     }
 
     // Extract video links
-    const meetingVideoMatch = section.match(/- \*\*Meeting video:\*\* \[Link\]\(([^)]+)\)/i);
+    const meetingVideoMatch = section.match(/- (?:\*\*)?Meeting video:(?:\*\*)?\s*\[Link\]\(([^)]+)\)/i);
     if (meetingVideoMatch) {
         parsedData.meetingInfo.meetingVideoLink = meetingVideoMatch[1].trim();
     }
 
     // Extract Media link
-    const mediaLinkMatch = section.match(/- \*\*Media link:\*\* \[Link\]\(([^)]+)\)/i);
+    const mediaLinkMatch = section.match(/- (?:\*\*)?Media link:(?:\*\*)?\s*\[Link\]\(([^)]+)\)/i);
     if (mediaLinkMatch) {
         parsedData.meetingInfo.mediaLink = mediaLinkMatch[1].trim();
     }
 
     // Extract Miro board link
-    const miroBoardMatch = section.match(/- \*\*Miro board:\*\* \[Link\]\(([^)]+)\)/i);
+    const miroBoardMatch = section.match(/- (?:\*\*)?Miro board:(?:\*\*)?\s*\[Link\]\(([^)]+)\)/i);
     if (miroBoardMatch) {
         parsedData.meetingInfo.miroBoardLink = miroBoardMatch[1].trim();
     }
 
     // Extract Transcript link
-    const transcriptMatch = section.match(/- \*\*Transcript:\*\* \[Link\]\(([^)]+)\)/i);
+    const transcriptMatch = section.match(/- (?:\*\*)?Transcript:(?:\*\*)?\s*\[Link\]\(([^)]+)\)/i);
     if (transcriptMatch) {
         parsedData.meetingInfo.transcriptLink = transcriptMatch[1].trim();
     }
 
     // Extract Other media link
-    const otherMediaMatch = section.match(/- \*\*Other media:\*\* \[Link\]\(([^)]+)\)/i);
+    const otherMediaMatch = section.match(/- (?:\*\*)?Other media:(?:\*\*)?\s*\[Link\]\(([^)]+)\)/i);
     if (otherMediaMatch) {
         parsedData.meetingInfo.otherMediaLink = otherMediaMatch[1].trim();
     }
@@ -388,7 +394,7 @@ function parseSingleWorkgroup(
     }
 
     // Extract working docs
-    const workingDocsSection = section.match(/- \*\*Working Docs:\*\*([\s\S]*?)(?=\n\s*\n|\n####)/);
+    const workingDocsSection = section.match(/- (?:\*\*)?Working Docs:(?:\*\*)?([\s\S]*?)(?=\n\s*\n|\n####)/);
     if (workingDocsSection) {
         // Instead of using simple regex, we'll parse the markdown links more carefully
         // to handle titles with parentheses correctly
@@ -530,39 +536,44 @@ function parseSingleWorkgroup(
     // Parse tags/keywords
     const tagsSection = section.match(/#### Keywords\/tags:([\s\S]*?)(?=\n### |$)/);
     if (tagsSection) {
-        const topicsCoveredMatch = tagsSection[1].match(/- \*\*topics covered:\*\* ([^\n]+)/i);
+        const topicsCoveredMatch = tagsSection[1].match(/- (?:\*\*)?topics covered:(?:\*\*)?\s*([^\n]+)/i);
         if (topicsCoveredMatch) {
             parsedData.tags.topicsCovered = topicsCoveredMatch[1].trim();
         }
 
-        const emotionsMatch = tagsSection[1].match(/- \*\*emotions:\*\* ([^\n]+)/i);
+        const emotionsMatch = tagsSection[1].match(/- (?:\*\*)?emotions:(?:\*\*)?\s*([^\n]+)/i);
         if (emotionsMatch) {
             parsedData.tags.emotions = emotionsMatch[1].trim();
         }
 
-        const otherMatch = tagsSection[1].match(/- \*\*other:\*\* ([^\n]+)/i);
+        const otherMatch = tagsSection[1].match(/- (?:\*\*)?other:(?:\*\*)?\s*([^\n]+)/i);
         if (otherMatch) {
             parsedData.tags.other = otherMatch[1].trim();
         }
 
-        const gamesPlayedMatch = tagsSection[1].match(/- \*\*games played:\*\* ([^\n]+)/i);
+        const gamesPlayedMatch = tagsSection[1].match(/- (?:\*\*)?games played:(?:\*\*)?\s*([^\n]+)/i);
         if (gamesPlayedMatch) {
             parsedData.tags.gamesPlayed = gamesPlayedMatch[1].trim();
         }
     }
 
     // Check for no summary given or canceled meeting
-    if (section.includes("No Summary Given")) {
+    // Only mark as no summary given if there are no hosts/people present and the text appears
+    if (section.toLowerCase().includes("no summary given") &&
+        (parsedData.meetingInfo.host === undefined || !parsedData.meetingInfo.host || parsedData.meetingInfo.host.trim() === '') &&
+        (!parsedData.meetingInfo.peoplePresent || parsedData.meetingInfo.peoplePresent.trim() === '')) {
         parsedData.noSummaryGiven = true;
-        const summaryMatch = section.match(/No Summary Given/);
+        const summaryMatch = section.match(/No Summary Given/i);
         if (summaryMatch) {
             parsedData.noSummaryGivenText = summaryMatch[0];
         }
     }
 
-    if (section.includes("Meeting was cancelled")) {
+    if (section.toLowerCase().includes("meeting was cancelled") &&
+        (parsedData.meetingInfo.host === undefined || !parsedData.meetingInfo.host || parsedData.meetingInfo.host.trim() === '') &&
+        (!parsedData.meetingInfo.peoplePresent || parsedData.meetingInfo.peoplePresent.trim() === '')) {
         parsedData.canceledSummary = true;
-        const cancelMatch = section.match(/Meeting was cancelled/);
+        const cancelMatch = section.match(/Meeting was cancelled/i);
         if (cancelMatch) {
             parsedData.canceledSummaryText = cancelMatch[0];
         }
